@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Daily Report — Graphene Trace{% endblock %}
+{% block page_title %}Daily Report{% endblock %}
+{% block content %}
+<div class="report-header">
+  <div>
+    <h2>{{ patient.first_name }} {{ patient.last_name }}</h2>
+    <p>Generated {{ today }}</p>
+  </div>
+  <button onclick="window.print()" class="btn btn-outline">🖨 Print</button>
+</div>
+
+<div class="dash-grid">
+  <div class="panel">
+    <div class="panel-header"><h3>Today — {{ today|date:"d M" }}</h3></div>
+    <div class="report-metrics">
+      <div class="rm-item"><span class="rm-label">Max Peak Pressure</span><span class="rm-val">{{ today_data.max_peak }}</span></div>
+      <div class="rm-item"><span class="rm-label">Avg Contact Area</span><span class="rm-val">{{ today_data.avg_contact }}%</span></div>
+      <div class="rm-item"><span class="rm-label">Frames Recorded</span><span class="rm-val">{{ today_data.frames }}</span></div>
+      <div class="rm-item"><span class="rm-label">Alerts</span><span class="rm-val {% if today_data.alerts > 0 %}val-warn{% endif %}">{{ today_data.alerts }}</span></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><h3>Yesterday — {{ yesterday|date:"d M" }}</h3></div>
+    <div class="report-metrics">
+      <div class="rm-item"><span class="rm-label">Max Peak Pressure</span><span class="rm-val">{{ yest_data.max_peak }}</span></div>
+      <div class="rm-item"><span class="rm-label">Avg Contact Area</span><span class="rm-val">{{ yest_data.avg_contact }}%</span></div>
+      <div class="rm-item"><span class="rm-label">Frames Recorded</span><span class="rm-val">{{ yest_data.frames }}</span></div>
+      <div class="rm-item"><span class="rm-label">Alerts</span><span class="rm-val {% if yest_data.alerts > 0 %}val-warn{% endif %}">{{ yest_data.alerts }}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header"><h3>Day-on-Day Change</h3></div>
+  <div class="comparison-row">
+    {% for key,label in comparison.items %}
+    {% with val=comparison|dictsort:key %}{% endwith %}
+    {% endfor %}
+    {% for key,val in comparison.items %}
+    <div class="delta-card">
+      <span class="delta-label">{% if key == 'peak' %}Peak Pressure{% elif key == 'contact' %}Contact Area{% else %}Alerts{% endif %}</span>
+      {% if val is None %}<span class="delta-val neutral">No data</span>
+      {% elif val > 0 %}<span class="delta-val {% if key == 'contact' %}good{% else %}bad{% endif %}">▲ {{ val }}%</span>
+      {% elif val < 0 %}<span class="delta-val {% if key == 'contact' %}bad{% else %}good{% endif %}">▼ {{ val|floatformat:1|cut:"-" }}%</span>
+      {% else %}<span class="delta-val neutral">No change</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header"><h3>7-Day Trend</h3></div>
+  <canvas id="weeklyChart" height="80" style="padding:0 20px 20px"></canvas>
+</div>
+
+{% if recent_alerts %}
+<div class="panel">
+  <div class="panel-header"><h3>Recent Alerts</h3></div>
+  <table class="data-table">
+    <thead><tr><th>Time</th><th>Severity</th><th>Message</th></tr></thead>
+    <tbody>
+      {% for a in recent_alerts %}
+      <tr>
+        <td class="td-mono">{{ a.timestamp|date:"d M H:i" }}</td>
+        <td><span class="sev-badge sev-{{ a.severity }}">{{ a.severity|upper }}</span></td>
+        <td>{{ a.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const weekly = {{ weekly|safe }};
+  new Chart(document.getElementById('weeklyChart'),{
+    type:'bar',
+    data:{
+      labels:weekly.map(d=>d.date),
+      datasets:[
+        {label:'Max Peak',data:weekly.map(d=>d.max_peak),backgroundColor:'rgba(0,212,170,0.7)',borderRadius:4},
+        {label:'Alerts',  data:weekly.map(d=>d.alerts),  backgroundColor:'rgba(239,68,68,0.7)', borderRadius:4,yAxisID:'y1'},
+      ]
+    },
+    options:{responsive:true,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{family:'DM Sans'}}}},
+      scales:{
+        x:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,0.04)'}},
+        y1:{position:'right',ticks:{color:'#ef4444'},grid:{display:false}},
+      }
+    }
+  });
+});
+</script>
+{% endblock %}
