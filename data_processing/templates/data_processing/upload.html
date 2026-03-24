@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Upload Data — Graphene Trace{% endblock %}
+{% block page_title %}Upload Sensor Data{% endblock %}
+{% block content %}
+<div class="two-col">
+  <div class="panel">
+    <div class="panel-header"><h3>Upload CSV / ZIP Files</h3></div>
+    <form method="post" enctype="multipart/form-data" id="uploadForm"
+          action="{% if patient.pk != request.user.pk %}{% url 'data_processing:upload_for_patient' patient.pk %}{% else %}{% url 'data_processing:upload' %}{% endif %}"
+          style="padding:20px">
+      {% csrf_token %}
+      <div class="upload-zone" id="uploadZone">
+        <svg viewBox="0 0 24 24" width="48" height="48" stroke="#00d4aa" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p>Drag & drop CSV or ZIP files here</p>
+        <span>or click to browse</span>
+        <input type="file" name="csv_files" id="fileInput" multiple accept=".csv,.zip" hidden>
+      </div>
+      <div id="fileList" class="file-list" style="margin-top:8px"></div>
+      <button type="submit" class="btn btn-primary" id="submitBtn" style="margin-top:16px">Upload &amp; Process</button>
+    </form>
+    <div class="upload-hint">
+      <strong>Format:</strong> <code>userid_YYYYMMDD.csv</code> — 32 rows × 32 values per frame.<br>
+      Multiple files or a single ZIP archive are both accepted.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>Upload History</h3></div>
+    {% if sessions %}
+    <table class="data-table">
+      <thead><tr><th>File</th><th>Date</th><th>Frames</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td class="td-mono">{{ s.filename }}</td>
+          <td>{{ s.date_label|default:"—" }}</td>
+          <td>{{ s.frame_count }}</td>
+          <td><span class="badge-status status-{{ s.status }}">{{ s.status }}</span></td>
+        </tr>
+        {% if s.error_msg %}<tr><td colspan="4" class="td-error">{{ s.error_msg }}</td></tr>{% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No uploads yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const zone=document.getElementById('uploadZone'),input=document.getElementById('fileInput'),list=document.getElementById('fileList');
+zone.addEventListener('click',()=>input.click());
+zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over');});
+zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');input.files=e.dataTransfer.files;render(input.files);});
+input.addEventListener('change',()=>render(input.files));
+function render(files){list.innerHTML='';for(const f of files){const d=document.createElement('div');d.className='file-chip';d.textContent=`${f.name} (${(f.size/1024/1024).toFixed(2)} MB)`;list.appendChild(d);}}
+document.getElementById('uploadForm').addEventListener('submit',()=>{document.getElementById('submitBtn').textContent='Processing…';document.getElementById('submitBtn').disabled=true;});
+</script>
+{% endblock %}

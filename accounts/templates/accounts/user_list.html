@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}All Users — Graphene Trace{% endblock %}
+{% block page_title %}User Management{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <h3>All Users</h3>
+    <a href="{% url 'accounts:create_user' %}" class="btn btn-primary btn-sm">+ Add User</a>
+  </div>
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.first_name }} {{ u.last_name }}</td>
+        <td class="td-mono">{{ u.username }}</td>
+        <td>{{ u.email }}</td>
+        <td><span class="role-badge role-{{ u.role }}">{{ u.role }}</span></td>
+        <td><span class="badge-status {% if u.is_active %}status-done{% else %}status-error{% endif %}">{% if u.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+        <td>
+          <a href="{% url 'accounts:edit_user' u.pk %}" class="btn btn-sm btn-ghost">Edit</a>
+          {% if u.pk != request.user.pk %}
+          <form method="post" action="{% url 'accounts:delete_user' u.pk %}" style="display:inline" onsubmit="return confirm('Delete {{ u.username }}?')">
+            {% csrf_token %}<button type="submit" class="btn btn-sm btn-danger">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

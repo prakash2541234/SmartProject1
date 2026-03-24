@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Clinician Dashboard — Graphene Trace{% endblock %}
+{% block page_title %}Clinician Dashboard{% endblock %}
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">My Patients</div>
+    <div class="stat-value">{{ patients|length }}</div>
+    <div class="stat-unit">assigned</div>
+  </div>
+  <div class="stat-card {% if unread > 0 %}stat-alert{% endif %}">
+    <div class="stat-label">Unread Alerts</div>
+    <div class="stat-value">{{ unread }}</div>
+    <div class="stat-unit">requiring attention</div>
+  </div>
+</div>
+<div class="dash-grid">
+  <div class="panel">
+    <div class="panel-header"><h3>My Patients</h3></div>
+    {% if patients %}
+    <div class="patient-list">
+      {% for p in patients %}
+      <a href="{% url 'dashboard:clinician_patient' p.pk %}" class="patient-row">
+        <div class="patient-avatar">{{ p.first_name|slice:":1"|upper }}{{ p.last_name|slice:":1"|upper }}</div>
+        <div class="patient-info">
+          <strong>{{ p.first_name }} {{ p.last_name }}</strong>
+          <span>@{{ p.username }}</span>
+        </div>
+        <div class="patient-arrow">›</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">No patients assigned yet.</div>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h3>Recent Alerts</h3>
+      <a href="{% url 'dashboard:clinician_alerts' %}" class="link-sm">View all</a>
+    </div>
+    {% if all_alerts %}
+    <div class="alerts-list">
+      {% for a in all_alerts %}
+      <div class="alert-item sev-{{ a.severity }}">
+        <div class="alert-dot"></div>
+        <div class="alert-body">
+          <div class="alert-header-row">
+            <strong>{{ a.patient.first_name }} {{ a.patient.last_name }}</strong>
+            <span class="sev-badge sev-{{ a.severity }}">{{ a.severity|upper }}</span>
+          </div>
+          <p>{{ a.message }}</p>
+          <span class="alert-time">{{ a.timestamp|date:"d M H:i" }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">No alerts across your patients.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

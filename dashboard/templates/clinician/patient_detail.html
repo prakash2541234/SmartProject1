@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ patient.first_name }} {{ patient.last_name }} — Graphene Trace{% endblock %}
+{% block page_title %}{{ patient.first_name }} {{ patient.last_name }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="{% url 'dashboard:clinician_home' %}">Dashboard</a> › Patient Detail
+  <a href="{% url 'data_processing:upload_for_patient' patient.pk %}" class="btn btn-sm btn-primary" style="float:right;margin-top:-4px">Upload Data</a>
+  <a href="{% url 'reports:patient_report' patient.pk %}" class="btn btn-sm btn-outline" style="float:right;margin-top:-4px;margin-right:8px">📊 Report</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-label">Total Frames</div><div class="stat-value">{{ stats.total_frames }}</div></div>
+  <div class="stat-card"><div class="stat-label">Max Peak</div><div class="stat-value">{{ stats.max_peak|floatformat:0 }}</div></div>
+  <div class="stat-card"><div class="stat-label">Avg Peak</div><div class="stat-value">{{ stats.avg_peak|floatformat:0 }}</div></div>
+  <div class="stat-card"><div class="stat-label">Avg Contact</div><div class="stat-value">{{ stats.avg_contact|floatformat:1 }}<span style="font-size:1rem">%</span></div></div>
+</div>
+
+<div class="dash-grid">
+  <div class="panel heatmap-panel">
+    <div class="panel-header">
+      <h3>Pressure Map</h3>
+      <div style="display:flex;gap:8px">
+        <select id="sessionSelect" class="select-sm">
+          <option value="">Latest data</option>
+          {% for s in sessions %}{% if s.status == 'done' %}
+          <option value="{{ s.pk }}">{{ s.filename }} ({{ s.frame_count }})</option>
+          {% endif %}{% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline" id="playBtn">▶ Play</button>
+        <button class="btn btn-sm btn-ghost"   id="pauseBtn">⏸ Pause</button>
+      </div>
+    </div>
+    <div class="heatmap-wrapper">
+      <canvas id="heatmapCanvas" width="320" height="320"></canvas>
+      <div class="heatmap-legend"><span>Low</span><div class="legend-bar"></div><span>High</span></div>
+    </div>
+    <div class="timeline-section">
+      <input type="range" id="frameSlider" min="0" max="0" value="0" class="timeline-slider">
+      <div class="timeline-info"><span id="frameTimestamp">—</span><span id="frameCounter">—</span></div>
+    </div>
+    <div class="frame-metrics">
+      <div class="fm-item"><span class="fm-label">Peak</span><span class="fm-val" id="fmPeak">—</span></div>
+      <div class="fm-item"><span class="fm-label">Contact</span><span class="fm-val" id="fmContact">—</span></div>
+      <div class="fm-item"><span class="fm-label">Avg</span><span class="fm-val" id="fmAvg">—</span></div>
+    </div>
+  </div>
+
+  <div class="panel charts-panel">
+    <div class="panel-header">
+      <h3>Metrics Over Time</h3>
+      <div class="time-tabs">
+        <button class="tab-btn active" data-hours="1">1h</button>
+        <button class="tab-btn" data-hours="6">6h</button>
+        <button class="tab-btn" data-hours="24">24h</button>
+      </div>
+    </div>
+    <canvas id="peakChart"    height="120"></canvas>
+    <canvas id="contactChart" height="100" style="margin-top:12px"></canvas>
+  </div>
+</div>
+
+<div class="dash-grid" style="margin-top:0">
+  <div class="panel">
+    <div class="panel-header"><h3>Alerts</h3></div>
+    {% if alerts %}
+    <div class="alerts-list">
+      {% for a in alerts %}
+      <div class="alert-item sev-{{ a.severity }}">
+        <div class="alert-dot"></div>
+        <div class="alert-body">
+          <div class="alert-header-row">
+            <span class="sev-badge sev-{{ a.severity }}">{{ a.severity|upper }}</span>
+            <span class="alert-time">{{ a.timestamp|date:"d M H:i" }}</span>
+          </div>
+          <p>{{ a.message }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="empty-state">No alerts.</div>{% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>Comments & Replies</h3></div>
+    {% if comments %}
+      {% for c in comments %}
+      <div class="comment-card">
+        <div class="comment-meta">
+          <span class="comment-author">{{ c.patient.first_name }}</span>
+          <span class="comment-time">{{ c.timestamp|date:"d M H:i" }}</span>
+        </div>
+        <p class="comment-text">{{ c.text }}</p>
+        {% if c.clinician_reply %}
+          <div class="clinician-reply"><div class="reply-badge">Your Reply</div><p>{{ c.clinician_reply }}</p></div>
+        {% else %}
+          <form method="post" action="{% url 'dashboard:clinician_reply' c.pk %}" style="margin-top:8px">
+            {% csrf_token %}
+            <div class="reply-form">
+              <input type="text" name="reply" placeholder="Type reply…" class="form-control reply-input" required>
+              <button type="submit" class="btn btn-sm btn-primary">Reply</button>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}<div class="empty-state">No comments from this patient.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% load static %}
+<script src="{% static 'js/heatmap.js' %}"></script>
+<script src="{% static 'js/charts.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const pid = {{ patient.pk }};
+  HeatmapPlayer.init('heatmapCanvas', {
+    frameSlider:'frameSlider', playBtn:'playBtn', pauseBtn:'pauseBtn',
+    timestampEl:'frameTimestamp', counterEl:'frameCounter',
+    peakEl:'fmPeak', contactEl:'fmContact', avgEl:'fmAvg',
+    sessionSelect:'sessionSelect',
+    framesUrl: '{% url "dashboard:api_frames_list" %}?patient_id='+pid,
+    frameUrl:  '{% url "dashboard:api_frame" 0 %}'.replace('/0/','/')+'?patient_id='+pid,
+  });
+  ChartManager.init('peakChart','contactChart', 6, pid, '{% url "dashboard:api_metrics" %}');
+});
+</script>
+{% endblock %}

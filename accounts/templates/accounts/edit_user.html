@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ edit_user.username }} — Graphene Trace{% endblock %}
+{% block page_title %}Edit User: {{ edit_user.username }}{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:560px">
+  <div class="panel-header"><h3>Edit Account</h3></div>
+  <form method="post" action="{% url 'accounts:edit_user' edit_user.pk %}" style="padding:20px">
+    {% csrf_token %}
+    <div class="form-row">
+      <div class="form-group">
+        <label>First Name</label>
+        <input type="text" name="first_name" value="{{ edit_user.first_name }}" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Last Name</label>
+        <input type="text" name="last_name" value="{{ edit_user.last_name }}" class="form-control">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" name="email" value="{{ edit_user.email }}" class="form-control">
+    </div>
+    <div class="form-group">
+      <label>New Password <small style="color:var(--text3)">(leave blank to keep current)</small></label>
+      <input type="password" name="new_password" class="form-control">
+    </div>
+    {% if edit_user.role == 'patient' %}
+    <div class="form-group">
+      <label>Assign to Clinician</label>
+      <select name="clinician_id" class="form-control">
+        <option value="">— None —</option>
+        {% for c in clinicians %}
+        <option value="{{ c.pk }}" {% if pp and pp.clinician_id == c.pk %}selected{% endif %}>
+          {{ c.get_full_name|default:c.username }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" name="is_active" {% if edit_user.is_active %}checked{% endif %}> Account active
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="{% url 'accounts:user_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
