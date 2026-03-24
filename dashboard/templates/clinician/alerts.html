@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}All Alerts — Graphene Trace{% endblock %}
+{% block page_title %}Patient Alerts{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="panel-header"><h3>All Patient Alerts</h3></div>
+  {% if alerts %}
+  <div class="alerts-list">
+    {% for a in alerts %}
+    <div class="alert-item sev-{{ a.severity }}">
+      <div class="alert-dot"></div>
+      <div class="alert-body">
+        <div class="alert-header-row">
+          <strong>{{ a.patient.first_name }} {{ a.patient.last_name }}</strong>
+          <span class="sev-badge sev-{{ a.severity }}">{{ a.severity|upper }}</span>
+          <span class="alert-time">{{ a.timestamp|date:"d M Y H:i" }}</span>
+        </div>
+        <p>{{ a.message }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">No alerts across your patients.</div>
+  {% endif %}
+</div>
+{% endblock %}

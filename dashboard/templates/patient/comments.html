@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Comments — Graphene Trace{% endblock %}
+{% block page_title %}My Comments{% endblock %}
+{% block content %}
+<div class="two-col">
+  <div class="panel">
+    <div class="panel-header"><h3>Add a Comment</h3></div>
+    <form method="post" action="{% url 'dashboard:patient_comments' %}" style="padding:20px">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>Link to a reading (optional)</label>
+        <select name="frame_id" class="form-control">
+          <option value="">— General comment —</option>
+          {% for f in frames %}
+          <option value="{{ f.pk }}">{{ f.timestamp|date:"d M H:i" }} (Peak: {{ f.peak_pressure|floatformat:0 }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Your comment</label>
+        <textarea name="text" rows="4" class="form-control" placeholder="Describe any pain, discomfort or concerns…" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h3>Comment Thread</h3></div>
+    {% if comments %}
+      {% for c in comments %}
+      <div class="comment-card">
+        <div class="comment-meta">
+          <span class="comment-author">You</span>
+          <span class="comment-time">{{ c.timestamp|date:"d M Y H:i" }}</span>
+          {% if c.frame %}<span class="frame-ref">Frame #{{ c.frame.pk }}</span>{% endif %}
+        </div>
+        <p class="comment-text">{{ c.text }}</p>
+        {% if c.clinician_reply %}
+        <div class="clinician-reply">
+          <div class="reply-badge">Clinician Reply</div>
+          <p>{{ c.clinician_reply }}</p>
+          <span class="comment-time">{{ c.reply_at|date:"d M H:i" }}</span>
+        </div>
+        {% else %}
+        <div class="pending-reply">Awaiting clinician reply…</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="empty-state">No comments yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

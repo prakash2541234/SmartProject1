@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Analytics — Graphene Trace{% endblock %}
+{% block page_title %}Analytics & Risk{% endblock %}
+{% block content %}
+
+<div class="stats-grid">
+  <div class="stat-card {% if risk_score >= 7 %}stat-alert{% endif %}">
+    <div class="stat-label">Risk Score</div>
+    <div class="stat-value" style="color:{% if risk_score >= 7 %}#ef4444{% elif risk_score >= 4 %}#f59e0b{% else %}#00d4aa{% endif %}">
+      {{ risk_score }}<span style="font-size:1rem">/10</span>
+    </div>
+    <div class="stat-unit">{{ risk_label }}</div>
+  </div>
+</div>
+
+<!-- RISK GAUGE BAR -->
+<div class="panel">
+  <div class="panel-header"><h3>Risk Assessment (last 24h)</h3></div>
+  <div style="padding:20px">
+    <div style="background:var(--bg3);border-radius:8px;height:16px;overflow:hidden;margin-bottom:8px">
+      <div style="height:100%;width:{{ risk_score }}0%;background:{% if risk_score >= 7 %}#ef4444{% elif risk_score >= 4 %}#f59e0b{% else %}#00d4aa{% endif %};border-radius:8px;transition:width 0.6s ease"></div>
+    </div>
+    <p style="color:var(--text2);font-size:0.9rem">{{ risk_label }}</p>
+  </div>
+</div>
+
+<!-- 7-DAY CHART -->
+<div class="panel">
+  <div class="panel-header"><h3>7-Day Daily Summary</h3></div>
+  <canvas id="weeklyChart" height="80" style="padding:0 20px 20px"></canvas>
+</div>
+
+<!-- DAILY TABLE -->
+<div class="panel">
+  <div class="panel-header"><h3>Daily Breakdown</h3></div>
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Frames</th><th>Max Peak</th><th>Avg Peak</th><th>Avg Contact %</th><th>Alerts</th></tr></thead>
+    <tbody>
+      {% for d in daily %}
+      <tr>
+        <td>{{ d.date }}</td>
+        <td>{{ d.frames }}</td>
+        <td>{{ d.max_peak }}</td>
+        <td>{{ d.avg_peak }}</td>
+        <td>{{ d.avg_contact }}%</td>
+        <td>{% if d.alerts > 0 %}<span class="sev-badge sev-warning">{{ d.alerts }}</span>{% else %}0{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const daily = {{ daily|safe }};
+  new Chart(document.getElementById('weeklyChart'),{
+    type:'bar',
+    data:{
+      labels: daily.map(d=>d.date),
+      datasets:[
+        {label:'Max Peak',data:daily.map(d=>d.max_peak),backgroundColor:'rgba(0,212,170,0.7)',borderRadius:4},
+        {label:'Alerts',  data:daily.map(d=>d.alerts),  backgroundColor:'rgba(239,68,68,0.7)', borderRadius:4,yAxisID:'y1'},
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{family:'DM Sans'}}}},
+      scales:{
+        x:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'Pressure',color:'#64748b'}},
+        y1:{position:'right',ticks:{color:'#ef4444'},grid:{display:false},title:{display:true,text:'Alerts',color:'#ef4444'}},
+      }
+    }
+  });
+});
+</script>
+{% endblock %}
