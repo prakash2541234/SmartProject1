@@ -1,0 +1,41 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 420px;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 10px;
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+select, button {
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: white;
+}
+
+.new-btn {
+  background-color: #0078ff;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.new-btn:hover {
+  background-color: #005fcc;
+}

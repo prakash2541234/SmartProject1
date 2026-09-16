@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Process Status Monitor</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+</head>
+<body>
+    <div class="page-bg"></div>
+    <main class="container">
+        <header class="hero" aria-label="Page introduction">
+            <div class="hero-badge">Automation Monitor</div>
+            <h1>Subscription Process Status Dashboard</h1>
+            <p>
+                Welcome to our website. Use this dashboard to track current subscription workflow status updates
+                from Azure Logic Apps in a clear and user-friendly way.
+            </p>
+        </header>
+
+        <section class="tracker" aria-label="Process status checker">
+            <div class="section-head">
+                <h2>Check Process Status</h2>
+                <span class="refresh-note">Auto refresh every 5 seconds</span>
+            </div>
+
+            <div class="form-grid">
+                <div class="field-group">
+                    <label for="catalog_sys_id">Catalog Sys ID</label>
+                    <input id="catalog_sys_id" type="text" placeholder="Enter catalog_sys_id" />
+                </div>
+
+                <div class="field-group">
+                    <label for="ritm_num">RITM Number</label>
+                    <input id="ritm_num" type="text" placeholder="Enter ritm_num" />
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="checkStatusBtn" type="button">Check Status</button>
+            </div>
+
+            <p id="statusMessage" class="status-message status-neutral">Enter details and click Check Status.</p>
+        </section>
+
+        <section class="status-grid" aria-label="Process overview cards">
+            <article id="currentStatusCard" class="status-card fade-in">
+                <h3>Process Status</h3>
+                <p class="card-subtitle">Current workflow state for entered process</p>
+                <div class="status-pill status-neutral" id="statusPill">Waiting</div>
+            </article>
+
+            <article class="status-card fade-in delay-1">
+                <h3>Monitor Steps</h3>
+                <p class="card-subtitle">Typical automation journey</p>
+                <ul class="step-list" id="stepList">
+                    <li><span class="dot started"></span> Workflow Triggered</li>
+                    <li><span class="dot active"></span> Monitor Running</li>
+                    <li><span class="dot pending"></span> Output Delivered to UI</li>
+                </ul>
+            </article>
+        </section>
+    </main>
+
+    <script>
+        const catalogInput = document.getElementById("catalog_sys_id");
+        const ritmInput = document.getElementById("ritm_num");
+        const checkButton = document.getElementById("checkStatusBtn");
+        const statusMessage = document.getElementById("statusMessage");
+        const statusPill = document.getElementById("statusPill");
+        const currentStatusCard = document.getElementById("currentStatusCard");
+
+        function setCardState(state, label) {
+            statusPill.textContent = label;
+            statusPill.className = `status-pill ${state}`;
+            currentStatusCard.classList.remove("active-pulse");
+            if (state === "status-started") {
+                currentStatusCard.classList.add("active-pulse");
+            }
+        }
+
+        async function checkStatus() {
+            const catalogSysId = catalogInput.value.trim();
+            const ritmNum = ritmInput.value.trim();
+
+            if (!catalogSysId || !ritmNum) {
+                statusMessage.textContent = "Please provide both catalog_sys_id and ritm_num.";
+                statusMessage.className = "status-message status-neutral";
+                setCardState("status-neutral", "Waiting");
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    `/api/get-status/?catalog_sys_id=${encodeURIComponent(catalogSysId)}&ritm_num=${encodeURIComponent(ritmNum)}`
+                );
+                const data = await response.json();
+
+                if (data.status === "started") {
+                    statusMessage.textContent = `${catalogSysId} process has started`;
+                    statusMessage.className = "status-message status-started";
+                    setCardState("status-started", "Started");
+                    return;
+                }
+
+                if (data.status === "completed") {
+                    statusMessage.textContent = `${catalogSysId} process has completed`;
+                    statusMessage.className = "status-message status-completed";
+                    setCardState("status-completed", "Completed");
+                    return;
+                }
+
+                if (data.status === "not_found") {
+                    statusMessage.textContent = "Process not found";
+                    statusMessage.className = "status-message status-neutral";
+                    setCardState("status-neutral", "Not Found");
+                    return;
+                }
+
+                statusMessage.textContent = "Unable to determine status.";
+                statusMessage.className = "status-message status-neutral";
+                setCardState("status-neutral", "Unknown");
+            } catch (error) {
+                statusMessage.textContent = "Error while fetching process status.";
+                statusMessage.className = "status-message status-error";
+                setCardState("status-error", "Error");
+            }
+        }
+
+        checkButton.addEventListener("click", checkStatus);
+        setInterval(checkStatus, 5000);
+    </script>
+</body>
+</html>

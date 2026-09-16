@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog and RITM Lookup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: #101424;
+            color: #f2f4ff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 16px;
+        }
+
+        .top-floating {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(1000px, 92vw);
+            display: flex;
+            gap: 14px;
+            z-index: 1;
+        }
+
+        .float-box {
+            height: 26px;
+            border-radius: 10px;
+            animation: float 4s ease-in-out infinite;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+        }
+
+        .float-box.orange {
+            flex: 1;
+            background: #ff8b22;
+        }
+
+        .float-box.blue {
+            flex: 1.2;
+            background: #2f83ff;
+            animation-delay: 0.8s;
+        }
+
+        .float-box.orange-alt {
+            flex: 0.8;
+            background: #ff7b00;
+            animation-delay: 1.4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 2;
+            width: min(1000px, 96vw);
+            background: #181e34;
+            border-radius: 14px;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+            padding: 26px;
+            margin-top: 44px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid #485684;
+            background: #0f1529;
+            color: #f2f4ff;
+            padding: 0 10px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #2f83ff;
+            box-shadow: 0 0 0 3px rgba(47, 131, 255, 0.2);
+        }
+
+        button {
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: #2f83ff;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(255, 123, 0, 0.18);
+            color: #ffd7ba;
+            border: 1px solid rgba(255, 123, 0, 0.45);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid #35436f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #10182f;
+        }
+
+        th, td {
+            text-align: left;
+            border-bottom: 1px solid #2c3a64;
+            padding: 10px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #1f2a4f;
+            color: #cfe1ff;
+        }
+    </style>
+</head>
+<body>
+    {% load app_extras %}
+    <div class="top-floating">
+        <div class="float-box orange"></div>
+        <div class="float-box blue"></div>
+        <div class="float-box orange-alt"></div>
+    </div>
+
+    <main class="container">
+        <h1>Catalog SysID + RITM Lookup</h1>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">
+                <label for="catalog_sysid">Catalog SysID</label>
+                <input id="catalog_sysid" name="catalog_sysid" value="{{ catalog_sysid }}" required>
+            </div>
+
+            <div class="field">
+                <label for="ritm_number">RITM Number</label>
+                <input id="ritm_number" name="ritm_number" value="{{ ritm_number }}" required>
+            </div>
+
+            <button type="submit">Submit</button>
+        </form>
+
+        {% if error %}
+            <div class="message">{{ error }}</div>
+        {% endif %}
+
+        {% if results %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            {% for key in headers %}
+                                <th>{{ key }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in results %}
+                            <tr>
+                                {% for key in headers %}
+                                    <td>{{ row|get_item:key }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif searched and not error %}
+            <div class="message">Input values are not in table records.</div>
+        {% endif %}
+    </main>
+</body>
+</html>

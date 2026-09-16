@@ -1,0 +1,1 @@
+print("You are successfully connected with django")

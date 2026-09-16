@@ -1,0 +1,736 @@
+"""
+Azure Function App to create an Azure AD Service Principal via Microsoft Graph API
+"""
+import os
+import random
+import string
+import json
+import logging
+from typing import Optional, List
+import re
+from datetime import datetime
+import uuid
+
+import aiohttp
+from pydantic import BaseModel, Field, ValidationError, validator
+import azure.functions as func
+from azure.identity.aio import DefaultAzureCredential
+from azure.mgmt.authorization.aio import AuthorizationManagementClient
+from azure.cosmos.aio import CosmosClient
+from azure.cosmos import PartitionKey
+
+# Configuration
+MSGRAPH_CLIENT_ID = os.getenv("MSGRAPH_CLIENT_ID")
+MSGRAPH_CLIENT_SECRET = os.getenv("MSGRAPH_CLIENT_SECRET")
+MSGRAPH_TENANT_ID = os.getenv("MSGRAPH_TENANT_ID")
+GRAPH_SCOPE = "https://graph.microsoft.com/.default"
+GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
+
+# Cosmos DB Configuration
+COSMOS_ENDPOINT = os.getenv("COSMOSDB_ENDPOINT")
+COSMOS_KEY = os.getenv("COSMOSDB_KEY")
+COSMOS_DATABASE_NAME = os.getenv("COSMOSDB_DATABASE_Name", "azglz")
+COSMOS_INPUT_CONTAINER = os.getenv("COSMOSDB_INPUT_CONTAINER", "sp_requests")
+COSMOS_OUTPUT_CONTAINER = os.getenv("COSMOSDB_OUTPUT_CONTAINER", "service_principals_new")
+COSMOS_CONTAINER_NAME = COSMOS_INPUT_CONTAINER  # For backward compatibility
+
+# Email Notification Configuration
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+NOTIFICATION_FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "noreply@yourdomain.com")
+NOTIFICATION_REPLY_TO_EMAIL = os.getenv("NOTIFICATION_REPLY_TO_EMAIL", "support@yourdomain.com")
+
+if not all([MSGRAPH_CLIENT_ID, MSGRAPH_CLIENT_SECRET, MSGRAPH_TENANT_ID]):
+    logging.warning("MSGRAPH_CLIENT_ID, MSGRAPH_CLIENT_SECRET and MSGRAPH_TENANT_ID must be set")
+
+if not all([COSMOS_ENDPOINT, COSMOS_KEY]):
+    logging.warning("COSMOS_ENDPOINT and COSMOS_KEY must be set for CosmosDB integration")
+
+if not SENDGRID_API_KEY:
+    logging.warning("SENDGRID_API_KEY not set. Email notifications will be disabled.")
+
+# Pydantic models (v1 syntax for Azure Functions compatibility)
+class RequesterModel(BaseModel):
+    """Model for requester information"""
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    user_id: str = Field(..., min_length=1, max_length=50)
+    
+    @validator('first_name', 'last_name')
+    def validate_name(cls, v: str) -> str:
+        """Validate name contains only letters, spaces, hyphens"""
+        if not re.match(r'^[a-zA-Z\s\-]+$', v):
+            raise ValueError('Name must contain only letters, spaces, and hyphens')
+        return v.strip()
+    
+    @validator('user_id')
+    def validate_user_id(cls, v: str) -> str:
+        """Validate user_id format"""
+        if not v.strip():
+            raise ValueError('user_id cannot be empty')
+        return v.strip()
+
+class RequestParametersModel(BaseModel):
+    """Model for request parameters"""
+    requester: RequesterModel
+    ritm_number: str = Field(..., min_length=1, max_length=50)
+    catalog_task_sysid: str = Field(..., min_length=1, max_length=100)
+    
+    @validator('ritm_number')
+    def validate_ritm_number(cls, v: str) -> str:
+        """Validate RITM number format (optional - customize as needed)"""
+        v = v.strip()
+        if not v:
+            raise ValueError('ritm_number cannot be empty')
+        # Add specific RITM format validation if needed
+        # Example: if not re.match(r'^RITM\d{7}$', v):
+        #     raise ValueError('ritm_number must be in format RITM followed by 7 digits')
+        return v
+    
+    @validator('catalog_task_sysid')
+    def validate_catalog_task_sysid(cls, v: str) -> str:
+        """Validate catalog task system ID"""
+        v = v.strip()
+        if not v:
+            raise ValueError('catalog_task_sysid cannot be empty')
+        return v
+
+class SPParametersModel(BaseModel):
+    """Model for service principal parameters"""
+    project_name: str = Field(..., min_length=1, max_length=100)
+    az_subscription_id: Optional[str] = Field(None)
+    business_function: Optional[str] = Field(None, max_length=50)
+    environment: str = Field(..., min_length=1, max_length=50)
+    sub_role: str = Field(..., min_length=1, max_length=100)
+    sp_owners: List[str] = Field(..., min_items=1)
+    
+    @validator('project_name')
+    def validate_project_name(cls, v: str) -> str:
+        """Validate project name"""
+        v = v.strip()
+        if not v:
+            raise ValueError('project_name cannot be empty')
+        # Allow alphanumeric and basic special characters
+        if not re.match(r'^[a-zA-Z0-9\-_]+$', v):
+            raise ValueError('project_name must contain only letters, numbers, hyphens, and underscores')
+        return v
+    
+    @validator('az_subscription_id')
+    def validate_subscription_id(cls, v: Optional[str]) -> Optional[str]:
+        """Validate subscription ID is a valid GUID if provided"""
+        if v and v.strip():
+            v = v.strip()
+            guid_pattern = r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'
+            if not re.match(guid_pattern, v):
+                raise ValueError('az_subscription_id must be a valid GUID')
+            return v
+        return None
+    
+    @validator('business_function')
+    def validate_business_function(cls, v: Optional[str]) -> Optional[str]:
+        """Validate business function"""
+        if v:
+            v = v.strip().upper()
+            if not v:
+                return None
+            return v
+        return None
+    
+    @validator('environment')
+    def validate_environment(cls, v: str) -> str:
+        """Validate environment value"""
+        v = v.strip().lower()
+        valid_environments = ['dev', 'test', 'qa', 'uat', 'staging', 'prod', 'production', 'poc']
+        if v not in valid_environments:
+            raise ValueError(f'environment must be one of: {", ".join(valid_environments)}')
+        return v
+    
+    @validator('sub_role')
+    def validate_subscription_role(cls, v: str) -> str:
+        """Validate subscription role"""
+        v = v.strip().lower()
+        if not v:
+            raise ValueError('sub_role cannot be empty')
+        
+        # Normalize common role names
+        role_mapping = {
+            'owner': 'Owner',
+            'contributor': 'Contributor',
+            'reader': 'Reader',
+            'user access administrator': 'User Access Administrator'
+        }
+        
+        return role_mapping.get(v, v.title())
+    
+    @validator('sp_owners')
+    def validate_sp_owners(cls, v: List[str]) -> List[str]:
+        """Validate SP owners list"""
+        if not v:
+            raise ValueError('sp_owners must contain at least one owner')
+        
+        cleaned_owners = []
+        for owner in v:
+            owner = owner.strip()
+            if not owner:
+                raise ValueError('sp_owners cannot contain empty values')
+            # Validate email format
+            if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', owner):
+                raise ValueError(f'Invalid email format for owner: {owner}')
+            cleaned_owners.append(owner)
+        
+        return cleaned_owners
+
+class CreateSPRequest(BaseModel):
+    """Main request model for creating service principal"""
+    sp_parameters: SPParametersModel
+    request_parameters: RequestParametersModel
+
+class CreateSPResponse(BaseModel):
+    """Response model for created service principal"""
+    appId: str
+    applicationObjectId: str
+    servicePrincipalObjectId: str
+    displayName: str
+    projectName: str
+    businessFunction: str
+    environment: str
+    subscriptionId: Optional[str]
+    assignedRole: str
+    owners: List[str]
+    ritmNumber: str
+
+# ---------- Graph token helper ----------# ---------- Graph token helper ----------
+async def get_graph_token() -> str:
+    """Get the graph token based on credentials"""
+    token_url = f"https://login.microsoftonline.com/{MSGRAPH_TENANT_ID}/oauth2/v2.0/token"
+    data = {
+        "client_id": MSGRAPH_CLIENT_ID,
+        "client_secret": MSGRAPH_CLIENT_SECRET,
+        "scope": GRAPH_SCOPE,
+        "grant_type": "client_credentials",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(token_url, data=data) as resp:
+            text = await resp.text()
+            if resp.status != 200:
+                raise Exception(f"Failed to obtain Graph token: {resp.status} {text}")
+            body = await resp.json()
+            return body["access_token"]
+
+# ---------- Email notification helper ----------
+async def send_email_notification(to_email: str, subject: str, html_content: str, text_content: str) -> bool:
+    """Send email notification using SendGrid API"""
+    if not SENDGRID_API_KEY:
+        logging.warning("SendGrid API key not configured. Skipping email notification.")
+        return False
+    
+    try:
+        sendgrid_url = "https://api.sendgrid.com/v3/mail/send"
+        headers = {
+            "Authorization": f"Bearer {SENDGRID_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "personalizations": [
+                {
+                    "to": [{"email": to_email}],
+                    "subject": subject
+                }
+            ],
+            "from": {"email": NOTIFICATION_FROM_EMAIL},
+            "reply_to": {"email": NOTIFICATION_REPLY_TO_EMAIL},
+            "content": [
+                {
+                    "type": "text/plain",
+                    "value": text_content
+                },
+                {
+                    "type": "text/html",
+                    "value": html_content
+                }
+            ]
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(sendgrid_url, headers=headers, json=payload) as resp:
+                if resp.status in (200, 202):
+                    logging.info(f"Email notification sent successfully to {to_email}")
+                    return True
+                else:
+                    text = await resp.text()
+                    logging.error(f"Failed to send email notification: {resp.status} {text}")
+                    return False
+    except Exception as e:
+        logging.error(f"Error sending email notification: {e}", exc_info=True)
+        return False
+
+# ---------- Main endpoint ----------
+async def main(req: func.HttpRequest) -> func.HttpResponse:
+    """Create an Azure AD Service Principal via Microsoft Graph API"""
+    
+    logging.info('Processing service principal creation request')
+    
+    # Parse and validate request
+    try:
+        raw_body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            body=json.dumps({"error": "Invalid JSON", "message": "Request body must be valid JSON"}),
+            status_code=400,
+            mimetype="application/json"
+        )
+    
+    try:
+        request_payload = CreateSPRequest(**raw_body)
+    except ValidationError as e:
+        logging.warning(f"Validation failed: {e.json()}")
+        return func.HttpResponse(
+            body=json.dumps({
+                "error": "Validation failed",
+                "details": e.errors(),
+                "message": "Please check the request payload and fix the validation errors"
+            }),
+            status_code=400,
+            mimetype="application/json"
+        )
+    
+    # Extract validated fields
+    sp_params = request_payload.sp_parameters
+    req_params = request_payload.request_parameters
+    
+    project_name = sp_params.project_name
+    subscription_id = sp_params.az_subscription_id
+    business_function = sp_params.business_function
+    environment = sp_params.environment
+    subscription_role = sp_params.sub_role
+    sp_owners = sp_params.sp_owners
+    
+    requester = req_params.requester
+    ritm_number = req_params.ritm_number
+    catalog_task_sysid = req_params.catalog_task_sysid
+    
+    # Generate display name for the service principal
+    # Format: sp-azf-<appname>-<environment>-<5 alphanumeric uniqueid>
+    random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+    human_display = f"sp-azf-{project_name}-{environment.lower()}-{random_suffix}"
+    
+    logging.info(f"Creating SP: {human_display} for subscription: {subscription_id}")
+    logging.info(f"Requested by: {requester.first_name} {requester.last_name} ({requester.user_id})")
+
+    # Commented out for actual SP creation - uncomment to test validation only
+    # return func.HttpResponse(
+    #     body=json.dumps({
+    #         "message": "Validation successful",
+    #         "sp_name": human_display,
+    #         "project_name": project_name,
+    #         "business_function": business_function,
+    #         "environment": environment,
+    #         "subscription_id": subscription_id,
+    #         "role": subscription_role,
+    #         "owners": sp_owners,
+    #         "ritm_number": ritm_number
+    #     }),
+    #     status_code=200,
+    #     mimetype="application/json"
+    # )
+
+    # Actual SP creation logic
+    try:
+        # 1) Get Graph token
+        token = await get_graph_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        
+        # 2) Create AAD application (always create new)
+        app_object_id = None
+        created_app_id = None
+        
+        # Create new AAD application
+        async with aiohttp.ClientSession() as session:
+            app_payload = {
+                "displayName": human_display,
+                "signInAudience": "AzureADMyOrg"
+            }
+            async with session.post(f"{GRAPH_ENDPOINT}/applications", headers=headers, json=app_payload) as resp:
+                text = await resp.text()
+                if resp.status not in (200, 201):
+                    logging.error(f"Failed to create Application: {resp.status} {text}")
+                    return func.HttpResponse(
+                        body=json.dumps({
+                            "error": "Failed to create Application",
+                            "details": f"{resp.status} {text}",
+                            "ritm_number": ritm_number
+                        }),
+                        status_code=500,
+                        mimetype="application/json"
+                    )
+                app_obj = await resp.json()
+                created_app_id = app_obj.get("appId")
+                app_object_id = app_obj.get("id")
+        
+        # 2.5) Add owners to the Application registration
+        # First, resolve owner identifiers to user object IDs
+        owner_object_ids = []
+        async with aiohttp.ClientSession() as session:
+            for owner in sp_owners:
+                # Try to get user by UPN (email) or ID
+                try:
+                    # First try as UPN (email)
+                    async with session.get(
+                        f"{GRAPH_ENDPOINT}/users/{owner}",
+                        headers=headers
+                    ) as resp:
+                        if resp.status == 200:
+                            user_obj = await resp.json()
+                            user_id = user_obj.get("id")
+                            owner_object_ids.append(user_id)
+                            logging.info(f"Resolved owner {owner} to object ID: {user_id}")
+                        else:
+                            # If direct lookup fails, try filter query
+                            text = await resp.text()
+                            async with session.get(
+                                f"{GRAPH_ENDPOINT}/users?$filter=userPrincipalName eq '{owner}' or mail eq '{owner}'",
+                                headers=headers
+                            ) as filter_resp:
+                                if filter_resp.status == 200:
+                                    users_list = await filter_resp.json()
+                                    users = users_list.get("value", [])
+                                    if users:
+                                        user_id = users[0].get("id")
+                                        owner_object_ids.append(user_id)
+                                        logging.info(f"Resolved owner {owner} to object ID: {user_id}")
+                                    else:
+                                        logging.warning(f"Owner {owner} not found in directory")
+                                else:
+                                    logging.warning(f"Failed to resolve owner {owner}: {filter_resp.status}")
+                except Exception as e:
+                    logging.warning(f"Error resolving owner {owner}: {e}")
+                    continue
+        
+        # Add resolved owners to the Application
+        async with aiohttp.ClientSession() as session:
+            for owner_id in owner_object_ids:
+                owner_ref_payload = {
+                    "@odata.id": f"{GRAPH_ENDPOINT}/directoryObjects/{owner_id}"
+                }
+                async with session.post(
+                    f"{GRAPH_ENDPOINT}/applications/{app_object_id}/owners/$ref",
+                    headers=headers,
+                    json=owner_ref_payload
+                ) as resp:
+                    if resp.status in (201, 204):
+                        logging.info(f"Successfully added owner {owner_id} to application")
+                    else:
+                        text = await resp.text()
+                        # Check if owner already exists (400 or 409 conflict)
+                        if resp.status in (400, 409) and ("already exist" in text.lower() or "already a member" in text.lower()):
+                            logging.info(f"Owner {owner_id} already exists on application")
+                        else:
+                            logging.warning(f"Failed to add owner {owner_id} to application: {resp.status} {text}")
+        
+        # 3) Create service principal
+        sp_object_id = None
+        async with aiohttp.ClientSession() as session:
+            sp_payload = {"appId": created_app_id}
+            async with session.post(f"{GRAPH_ENDPOINT}/servicePrincipals", headers=headers, json=sp_payload) as resp:
+                text = await resp.text()
+                if resp.status not in (200, 201):
+                    # Try to find existing SP
+                    async with session.get(
+                        f"{GRAPH_ENDPOINT}/servicePrincipals?$filter=appId eq '{created_app_id}'",
+                        headers=headers
+                    ) as gresp:
+                        if gresp.status == 200:
+                            gbody = await gresp.json()
+                            items = gbody.get("value", [])
+                            if items:
+                                sp_obj = items[0]
+                                sp_object_id = sp_obj.get("id")
+                                logging.info(f"Found existing service principal: {sp_object_id}")
+                            else:
+                                return func.HttpResponse(
+                                    body=json.dumps({
+                                        "error": "Failed to create ServicePrincipal",
+                                        "details": f"{resp.status} {text}",
+                                        "ritm_number": ritm_number
+                                    }),
+                                    status_code=500,
+                                    mimetype="application/json"
+                                )
+                        else:
+                            return func.HttpResponse(
+                                body=json.dumps({
+                                    "error": "Failed to create ServicePrincipal",
+                                    "details": f"{resp.status} {text}",
+                                    "ritm_number": ritm_number
+                                }),
+                                status_code=500,
+                                mimetype="application/json"
+                            )
+                else:
+                    sp_obj = await resp.json()
+                    sp_object_id = sp_obj.get("id")
+        
+        # 4) Add owners to the service principal (reuse owner_object_ids from step 2.5)
+        async with aiohttp.ClientSession() as session:
+            for owner_id in owner_object_ids:
+                owner_ref_payload = {
+                    "@odata.id": f"{GRAPH_ENDPOINT}/directoryObjects/{owner_id}"
+                }
+                async with session.post(
+                    f"{GRAPH_ENDPOINT}/servicePrincipals/{sp_object_id}/owners/$ref",
+                    headers=headers,
+                    json=owner_ref_payload
+                ) as resp:
+                    if resp.status in (201, 204):
+                        logging.info(f"Successfully added owner {owner_id} to service principal")
+                    else:
+                        text = await resp.text()
+                        # Check if owner already exists (400 or 409 conflict)
+                        if resp.status in (400, 409) and ("already exist" in text.lower() or "already a member" in text.lower()):
+                            logging.info(f"Owner {owner_id} already exists on service principal")
+                        else:
+                            logging.warning(f"Failed to add owner {owner_id} to service principal: {resp.status} {text}")
+        
+        # 5) Assign subscription role (if subscription ID is provided)
+        if subscription_id:
+            # Map role name to role definition ID
+            role_mapping = {
+                "Contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+                "Reader": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+                "Owner": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+                # Add more role mappings as needed
+            }
+            
+            role_definition_id = role_mapping.get(subscription_role)
+            if not role_definition_id:
+                # Use the role name as-is if not in mapping
+                role_definition_id = subscription_role
+            
+            scope = f"/subscriptions/{subscription_id}"
+            assignment_name = str(uuid.uuid4())
+            
+            async with DefaultAzureCredential() as credential:
+                async with AuthorizationManagementClient(credential, subscription_id) as auth_client:
+                    try:
+                        await auth_client.role_assignments.create(
+                            scope=scope,
+                            role_assignment_name=assignment_name,
+                            parameters={
+                                "role_definition_id": f"/subscriptions/{subscription_id}/providers/Microsoft.Authorization/roleDefinitions/{role_definition_id}",
+                                "principal_id": sp_object_id
+                            }
+                        )
+                        logging.info(f"Successfully assigned {subscription_role} role")
+                    except Exception as e:
+                        logging.warning(f"Failed to assign {subscription_role} role: {e}")
+                        # Don't fail the entire request if role assignment fails
+        else:
+            logging.info("No subscription ID provided. Skipping role assignment.")
+        
+        # 6) Store the SP details into CosmosDB
+        if COSMOS_ENDPOINT and COSMOS_KEY:
+            try:
+                async with CosmosClient(COSMOS_ENDPOINT, COSMOS_KEY) as cosmos_client:
+                    # Get or create database
+                    database = cosmos_client.get_database_client(COSMOS_DATABASE_NAME)
+                    
+                    # Store request payload in input container (sp_requests)
+                    input_container = database.get_container_client(COSMOS_INPUT_CONTAINER)
+                    request_document = {
+                        "id": ritm_number,
+                        "sp_parameters": {
+                            "project_name": project_name,
+                            "application_id": "",
+                            "environment": environment,
+                            "az_subscription_id": subscription_id if subscription_id else "",
+                            "sub_role": subscription_role,
+                            "sp_owners": sp_owners
+                        },
+                        "request_parameters": {
+                            "requester": {
+                                "first_name": requester.first_name,
+                                "last_name": requester.last_name,
+                                "user_id": requester.user_id
+                            },
+                            "ritmNumber": ritm_number,
+                            "catalog_task_sysid": catalog_task_sysid
+                        },
+                        "createdAt": datetime.utcnow().isoformat(),
+                        "status": "processed"
+                    }
+                    await input_container.upsert_item(body=request_document)
+                    logging.info(f"Stored request payload in {COSMOS_INPUT_CONTAINER} with id={ritm_number}")
+                    
+                    # Store SP output in output container (service_principals_new)
+                    output_container = database.get_container_client(COSMOS_OUTPUT_CONTAINER)
+                    
+                    # Prepare document to store - matches DecSP1 structure
+                    sp_document = {
+                        "id": ritm_number,  # Use RITM as document ID
+                        "appId": created_app_id,
+                        "applicationObjectId": app_object_id,
+                        "servicePrincipalObjectId": sp_object_id,
+                        "service_principal_new_id": sp_object_id,  # Partition key field
+                        "displayName": human_display,
+                        "projectName": project_name,
+                        "businessFunction": business_function,
+                        "environment": environment,
+                        "subscriptionId": subscription_id if subscription_id else "",
+                        "subscriptionRole": subscription_role,
+                        "owners": sp_owners,
+                        "ownerObjectIds": owner_object_ids,
+                        "request_parameters": {
+                            "requester": {
+                                "first_name": requester.first_name,
+                                "last_name": requester.last_name,
+                                "user_id": requester.user_id
+                            },
+                            "ritmNumber": ritm_number,
+                            "catalog_task_sysid": catalog_task_sysid
+                        },
+                        "createdAt": datetime.utcnow().isoformat(),
+                        "status": "active"
+                    }
+                    
+                    # Insert document into output container with partition key
+                    await output_container.upsert_item(body=sp_document)
+                    logging.info(f"Stored SP output in {COSMOS_OUTPUT_CONTAINER} with id {ritm_number}")
+                    
+            except Exception as e:
+                logging.error(f"Failed to store SP details in CosmosDB: {e}", exc_info=True)
+                # Don't fail the entire request if CosmosDB storage fails
+        else:
+            logging.warning("CosmosDB configuration not found. Skipping storage of SP details.")
+        
+        # 7) Send notification to requester (COMMENTED OUT FOR TESTING)
+        # Uncomment the section below when ready to enable notifications
+        # Send success notification email
+        # requester_email = requester.user_id if '@' in requester.user_id else f"{requester.user_id}@yourdomain.com"
+        # 
+        # success_subject = f"Service Principal Created Successfully - {ritm_number}"
+        # success_html = f"""
+        # <html>
+        # <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        #     <h2 style="color: #0078d4;">Service Principal Created Successfully</h2>
+        #     <p>Dear {requester.first_name} {requester.last_name},</p>
+        #     <p>Your service principal has been created successfully.</p>
+        #     
+        #     <h3 style="color: #0078d4;">Service Principal Details:</h3>
+        #     <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+        #         <tr style="background-color: #f2f2f2;">
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Display Name</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{human_display}</td>
+        #         </tr>
+        #         <tr>
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Application ID</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{created_app_id}</td>
+        #         </tr>
+        #         <tr style="background-color: #f2f2f2;">
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Application Object ID</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{app_object_id}</td>
+        #         </tr>
+        #         <tr>
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Service Principal Object ID</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{sp_object_id}</td>
+        #         </tr>
+        #         <tr style="background-color: #f2f2f2;">
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Environment</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{environment.upper()}</td>
+        #         </tr>
+        #         <tr>
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Subscription ID</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{subscription_id}</td>
+        #         </tr>
+        #         <tr style="background-color: #f2f2f2;">
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Assigned Role</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{subscription_role}</td>
+        #         </tr>
+        #         <tr>
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>Owners</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{', '.join(sp_owners)}</td>
+        #         </tr>
+        #         <tr style="background-color: #f2f2f2;">
+        #             <td style="padding: 10px; border: 1px solid #ddd;"><strong>RITM Number</strong></td>
+        #             <td style="padding: 10px; border: 1px solid #ddd;">{ritm_number}</td>
+        #         </tr>
+        #     </table>
+        #     
+        #     <h3 style="color: #d83b01; margin-top: 30px;">Important Reminders:</h3>
+        #     <ul>
+        #         <li>You will receive expiration reminder notifications 15 days and on the day before any credentials expire.</li>
+        #         <li>Please ensure credentials are rotated before expiration to avoid service disruptions.</li>
+        #         <li>Keep your service principal credentials secure and never share them in plain text.</li>
+        #     </ul>
+        #     
+        #     <p style="margin-top: 30px;">If you have any questions or concerns, please reply to this email or contact support.</p>
+        #     
+        #     <p>Best regards,<br>
+        #     Cloud Operations Team</p>
+        # </body>
+        # </html>
+        # """
+        # 
+        # success_text = f"""
+        # Service Principal Created Successfully
+        # 
+        # Dear {requester.first_name} {requester.last_name},
+        # 
+        # Your service principal has been created successfully.
+        # 
+        # Service Principal Details:
+        # - Display Name: {human_display}
+        # - Application ID: {created_app_id}
+        # - Application Object ID: {app_object_id}
+        # - Service Principal Object ID: {sp_object_id}
+        # - Environment: {environment.upper()}
+        # - Subscription ID: {subscription_id}
+        # - Assigned Role: {subscription_role}
+        # - Owners: {', '.join(sp_owners)}
+        # - RITM Number: {ritm_number}
+        # 
+        # Important Reminders:
+        # - You will receive expiration reminder notifications 15 days and on the day before any credentials expire.
+        # - Please ensure credentials are rotated before expiration to avoid service disruptions.
+        # - Keep your service principal credentials secure and never share them in plain text.
+        # 
+        # If you have any questions or concerns, please reply to this email or contact support.
+        # 
+        # Best regards,
+        # Cloud Operations Team
+        # """
+        # 
+        # await send_email_notification(requester_email, success_subject, success_html, success_text)
+        
+        logging.info("SP creation completed successfully. Notification sending is disabled for testing.")
+        
+        createsp_response = CreateSPResponse(
+            appId=created_app_id,
+            applicationObjectId=app_object_id,
+            servicePrincipalObjectId=sp_object_id,
+            displayName=human_display,
+            projectName=project_name,
+            businessFunction=business_function,
+            environment=environment,
+            subscriptionId=subscription_id if subscription_id else "N/A",
+            assignedRole=subscription_role,
+            owners=sp_owners,
+            ritmNumber=ritm_number
+        )
+        
+        return func.HttpResponse(
+            status_code=201,  # 201 Created for resource creation
+            body=createsp_response.json(),
+            mimetype="application/json"
+        )
+    
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}", exc_info=True)
+        return func.HttpResponse(
+            body=json.dumps({
+                "error": "Internal server error",
+                "ritm_number": ritm_number,
+                "message": "An unexpected error occurred. Please contact support."
+            }),
+            status_code=500,
+            mimetype="application/json"
+        )

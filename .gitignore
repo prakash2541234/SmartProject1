@@ -1,0 +1,25 @@
+# Local credentials and environment settings
+.env
+.env.*
+!.env.example
+local.settings.json
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# JavaScript dependencies and build output
+node_modules/
+dist/
+build/
+
+# Local editor and runtime artifacts
+.vscode/
+*.log
+*.bin
+*.pem
+*.key

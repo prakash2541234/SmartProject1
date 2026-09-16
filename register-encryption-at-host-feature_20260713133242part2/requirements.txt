@@ -1,0 +1,5 @@
+azure-functions
+azure-identity
+cryptography>=45.0.0
+cffi>=1.17.1
+requests

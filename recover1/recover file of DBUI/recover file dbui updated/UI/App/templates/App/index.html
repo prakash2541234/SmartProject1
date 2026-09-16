@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog and RITM Lookup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: #101424;
+            color: #f2f4ff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 16px;
+        }
+
+        .top-floating {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(1000px, 92vw);
+            display: flex;
+            gap: 14px;
+            z-index: 1;
+        }
+
+        .float-box {
+            height: 26px;
+            border-radius: 10px;
+            animation: float 4s ease-in-out infinite;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+        }
+
+        .float-box.orange {
+            flex: 1;
+            background: #ff8b22;
+        }
+
+        .float-box.blue {
+            flex: 1.2;
+            background: #2f83ff;
+            animation-delay: 0.8s;
+        }
+
+        .float-box.orange-alt {
+            flex: 0.8;
+            background: #ff7b00;
+            animation-delay: 1.4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 2;
+            width: min(1000px, 96vw);
+            background: #181e34;
+            border-radius: 14px;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+            padding: 26px;
+            margin-top: 44px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid #485684;
+            background: #0f1529;
+            color: #f2f4ff;
+            padding: 0 10px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #2f83ff;
+            box-shadow: 0 0 0 3px rgba(47, 131, 255, 0.2);
+        }
+
+        button {
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: #2f83ff;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .refresh-toggle {
+            height: 40px;
+            border: 1px solid #485684;
+            border-radius: 8px;
+            background: #0f1529;
+            color: #f2f4ff;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0 12px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(255, 123, 0, 0.18);
+            color: #ffd7ba;
+            border: 1px solid rgba(255, 123, 0, 0.45);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid #35436f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #10182f;
+        }
+
+        th, td {
+            text-align: left;
+            border-bottom: 1px solid #2c3a64;
+            padding: 10px;
+            font-size: 14px;
+            white-space: normal;
+        }
+
+        th {
+            background: #1f2a4f;
+            color: #cfe1ff;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .status-completed {
+            background: #22c55e;
+            color: #ffffff;
+        }
+
+        .status-inprogress {
+            background: #f7e3ab;
+            color: #8a5a00;
+        }
+
+        .status-pending {
+            background: #d4d7dd;
+            color: #2a3548;
+        }
+
+        .status-failed {
+            background: #ffd2d2;
+            color: #8a1f1f;
+        }
+
+        .status-skipped {
+            background: #d9d5f5;
+            color: #3a2d88;
+        }
+
+        .monitor-title {
+            font-weight: 600;
+        }
+
+        .json-cell {
+            min-width: 260px;
+            max-width: 320px;
+            white-space: normal;
+        }
+
+        .json-preview {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            background: #0a0f20;
+            border: 1px solid #2f3f6f;
+            border-radius: 8px;
+            color: #d9e8ff;
+            padding: 8px;
+            max-height: 48px;
+            overflow: auto;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            transition: max-height 0.2s ease;
+        }
+
+        .json-preview:hover {
+            max-height: 360px;
+        }
+
+        .section-title {
+            margin-top: 22px;
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: #cfe1ff;
+        }
+
+        .raw-cell {
+            max-width: 340px;
+        }
+
+        .raw-value {
+            margin: 0;
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    {% load app_extras %}
+    <div class="top-floating">
+        <div class="float-box orange"></div>
+        <div class="float-box blue"></div>
+        <div class="float-box orange-alt"></div>
+    </div>
+
+    <main class="container">
+        <h1>Catalog SysID + RITM Lookup</h1>
+
+        <form
+            id="lookup-form"
+            method="post"
+            data-searched="{{ searched|yesno:'true,false' }}"
+            data-refresh-needed="{{ refresh_needed|yesno:'true,false' }}"
+            data-poll-url="{% url 'poll_lookup' %}"
+        >
+            {% csrf_token %}
+            <div class="field">
+                <label for="catalog_sysid">Catalog SysID</label>
+                <input id="catalog_sysid" name="catalog_sysid" value="{{ catalog_sysid }}" required>
+            </div>
+
+            <div class="field">
+                <label for="ritm_number">RITM Number</label>
+                <input id="ritm_number" name="ritm_number" value="{{ ritm_number }}" required>
+            </div>
+
+            <button type="submit">Submit</button>
+        </form>
+
+        <div
+            id="monitor-progress-message"
+            class="message"
+            {% if not searched or not catalog_sysid or not ritm_number or not monitor_rows %}style="display:none;"{% endif %}
+        >
+            {{ monitor_received_count }} out of {{ monitor_total_count }} is received.
+        </div>
+        <div
+            id="auto-refresh-message"
+            class="message"
+            {% if not searched or not catalog_sysid or not ritm_number or not monitor_rows %}style="display:none;"{% endif %}
+        >
+            {% if refresh_needed %}
+                Auto-refresh is active (every 5 seconds) until all monitor values are received.
+            {% else %}
+                All monitor values are received. Auto-refresh has stopped.
+            {% endif %}
+        </div>
+        <button
+            id="refresh-toggle"
+            class="refresh-toggle"
+            type="button"
+            {% if not refresh_needed %}style="display:none;"{% endif %}
+        >Pause Auto-Refresh</button>
+
+        <div id="error-message" class="message" {% if not error %}style="display:none;"{% endif %}>{{ error }}</div>
+
+        {% if monitor_rows %}
+            <h2 class="section-title">Monitor Summary</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Monitor</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                            <th>Status Viewer (JSON)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in monitor_rows %}
+                            <tr data-monitor-id="{{ forloop.counter }}" data-status="{{ row.status|lower }}">
+                                <td>
+                                    <div>{{ row.monitor }}</div>
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ row.status|lower }}">{% if row.status == 'Completed' %}Success{% else %}{{ row.status }}{% endif %}</span>
+                                </td>
+                                <td class="monitor-details">{{ row.details }}</td>
+                                <td class="json-cell">
+                                    <div class="json-preview monitor-json">{{ row.payload_view }}</div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
+        {% if results and headers %}
+            <h2 class="section-title">Raw Table Values (All Retrieved Columns)</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead id="raw-table-head">
+                        <tr>
+                            {% for header in headers %}
+                                <th>{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody id="raw-table-body">
+                        {% for row in results %}
+                            <tr>
+                                {% for header in headers %}
+                                    <td class="raw-cell">
+                                        <pre class="raw-value">{{ row|get_item:header }}</pre>
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif searched and not error %}
+            <div class="message">Input values are not in table records.</div>
+        {% endif %}
+    </main>
+    <script>
+        (function () {
+            const form = document.getElementById('lookup-form');
+            if (!form) {
+                return;
+            }
+
+            const searched = form.dataset.searched === 'true';
+            const refreshNeeded = form.dataset.refreshNeeded === 'true';
+            const pollUrl = form.dataset.pollUrl;
+            const catalogInput = document.getElementById('catalog_sysid');
+            const ritmInput = document.getElementById('ritm_number');
+            const progressMessage = document.getElementById('monitor-progress-message');
+            const autoRefreshMessage = document.getElementById('auto-refresh-message');
+            const errorMessage = document.getElementById('error-message');
+            const rawTableHead = document.getElementById('raw-table-head');
+
+            if (!searched || !catalogInput || !ritmInput) {
+                return;
+            }
+
+            if (!refreshNeeded) {
+                return;
+            }
+
+            if (!catalogInput.value.trim() || !ritmInput.value.trim()) {
+                return;
+            }
+
+            const toggleButton = document.getElementById('refresh-toggle');
+            let isRunning = true;
+            let requestInFlight = false;
+
+            function getPendingMonitorIds() {
+                return Array.from(document.querySelectorAll('tr[data-monitor-id][data-status="pending"]'))
+                    .map(function (row) {
+                        return row.getAttribute('data-monitor-id');
+                    })
+                    .filter(function (value) {
+                        return !!value;
+                    });
+            }
+
+            function statusLabel(status) {
+                if (status === 'Completed') {
+                    return 'Success';
+                }
+                return status || 'Pending';
+            }
+
+            function statusClass(status) {
+                const safe = (status || 'Pending').toLowerCase();
+                return 'status-badge status-' + safe;
+            }
+
+            function renderRawTable(headers, rows) {
+                const currentRawTableBody = document.getElementById('raw-table-body');
+                if (!rawTableHead || !currentRawTableBody) {
+                    return;
+                }
+
+                const headerHtml = '<tr>' + headers.map(function (header) {
+                    return '<th>' + header + '</th>';
+                }).join('') + '</tr>';
+                rawTableHead.innerHTML = headerHtml;
+
+                const tbody = document.createElement('tbody');
+                tbody.id = 'raw-table-body';
+
+                rows.forEach(function (row) {
+                    const tr = document.createElement('tr');
+                    headers.forEach(function (header) {
+                        const td = document.createElement('td');
+                        td.className = 'raw-cell';
+                        const pre = document.createElement('pre');
+                        pre.className = 'raw-value';
+
+                        const value = row[header];
+                        if (value === null || value === undefined) {
+                            pre.textContent = '';
+                        } else if (typeof value === 'object') {
+                            try {
+                                pre.textContent = JSON.stringify(value, null, 2);
+                            } catch (error) {
+                                pre.textContent = String(value);
+                            }
+                        } else {
+                            pre.textContent = String(value);
+                        }
+
+                        td.appendChild(pre);
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+
+                currentRawTableBody.parentNode.replaceChild(tbody, currentRawTableBody);
+            }
+
+            function updateMonitorRows(updates) {
+                updates.forEach(function (update) {
+                    const row = document.querySelector('tr[data-monitor-id="' + update.monitor_id + '"]');
+                    if (!row) {
+                        return;
+                    }
+
+                    if (row.getAttribute('data-status') !== 'pending') {
+                        return;
+                    }
+
+                    row.setAttribute('data-status', (update.status || 'Pending').toLowerCase());
+
+                    const badge = row.querySelector('.status-badge');
+                    if (badge) {
+                        badge.className = statusClass(update.status);
+                        badge.textContent = statusLabel(update.status);
+                    }
+
+                    const detailCell = row.querySelector('.monitor-details');
+                    if (detailCell) {
+                        detailCell.textContent = update.details || '';
+                    }
+
+                    const jsonCell = row.querySelector('.monitor-json');
+                    if (jsonCell) {
+                        jsonCell.textContent = update.payload_view || '';
+                    }
+                });
+            }
+
+            function updateProgress(receivedCount, totalCount, refreshStillNeeded) {
+                if (progressMessage) {
+                    progressMessage.style.display = '';
+                    progressMessage.textContent = receivedCount + ' out of ' + totalCount + ' is received.';
+                }
+
+                if (autoRefreshMessage) {
+                    autoRefreshMessage.style.display = '';
+                    if (refreshStillNeeded) {
+                        autoRefreshMessage.textContent = 'Auto-refresh is active (every 5 seconds) until all monitor values are received.';
+                    } else {
+                        autoRefreshMessage.textContent = 'All monitor values are received. Auto-refresh has stopped.';
+                    }
+                }
+
+                if (toggleButton) {
+                    if (refreshStillNeeded) {
+                        toggleButton.style.display = '';
+                    } else {
+                        toggleButton.style.display = 'none';
+                    }
+                }
+            }
+
+            async function pollSections() {
+                if (!isRunning || requestInFlight) {
+                    return;
+                }
+
+                requestInFlight = true;
+                try {
+                    const formData = new FormData(form);
+                    const pendingIds = getPendingMonitorIds();
+                    formData.set('pending_monitor_ids', pendingIds.join(','));
+
+                    const response = await fetch(pollUrl, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    if (errorMessage) {
+                        if (data.error) {
+                            errorMessage.style.display = '';
+                            errorMessage.textContent = data.error;
+                        } else {
+                            errorMessage.style.display = 'none';
+                            errorMessage.textContent = '';
+                        }
+                    }
+
+                    if (Array.isArray(data.monitor_updates)) {
+                        updateMonitorRows(data.monitor_updates);
+                    }
+
+                    if (Array.isArray(data.headers) && Array.isArray(data.rows)) {
+                        renderRawTable(data.headers, data.rows);
+                    }
+
+                    updateProgress(data.monitor_received_count || 0, data.monitor_total_count || 7, !!data.refresh_needed);
+
+                    if (!data.refresh_needed) {
+                        isRunning = false;
+                        if (toggleButton) {
+                            toggleButton.textContent = 'Resume Auto-Refresh';
+                        }
+                    }
+                } catch (error) {
+                    if (errorMessage) {
+                        errorMessage.style.display = '';
+                        errorMessage.textContent = 'Unable to refresh monitor data.';
+                    }
+                } finally {
+                    requestInFlight = false;
+                }
+            }
+
+            const intervalId = setInterval(function () {
+                pollSections();
+            }, 5000);
+
+            if (!toggleButton) {
+                return;
+            }
+
+            toggleButton.addEventListener('click', function () {
+                isRunning = !isRunning;
+                toggleButton.textContent = isRunning ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh';
+            });
+
+            window.addEventListener('beforeunload', function () {
+                clearInterval(intervalId);
+            });
+        })();
+    </script>
+</body>
+</html>

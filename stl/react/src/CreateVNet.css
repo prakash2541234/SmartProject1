@@ -1,0 +1,347 @@
+.vnet-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  font-family: Arial, sans-serif;
+  color: #17324a;
+  background: linear-gradient(180deg, #f2f8ff 0%, #eef5fc 100%);
+  border-radius: 12px;
+}
+
+.vnet-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.vnet-header h1 {
+  margin: 0;
+  color: #25313d;
+}
+
+.vnet-back {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  background: #5f6f7f;
+  color: #fff;
+  cursor: pointer;
+}
+
+.vnet-back:hover {
+  background: #4d5b68;
+}
+
+.vnet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color-scheme: light;
+}
+
+.vnet-section {
+  background: #ffffff;
+  border: 1px solid #c4d9ec;
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 4px 14px rgba(18, 53, 86, 0.1);
+}
+
+.vnet-section h2,
+.vnet-section h3 {
+  margin: 0;
+  color: #183a56;
+}
+
+.section-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.vnet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.vnet-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #22313f;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.vnet-form input,
+.vnet-form select {
+  width: 100%;
+  border: 1px solid #b8cde2;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 14px;
+  background: #fff;
+  color: #12344d;
+  -webkit-text-fill-color: #12344d;
+  caret-color: #12344d;
+}
+
+.vnet-form select {
+  cursor: pointer;
+}
+
+.vnet-form option {
+  background: #ffffff;
+  color: #12344d;
+}
+
+.vnet-form input::placeholder {
+  color: #5c6f80;
+  opacity: 1;
+}
+
+.vnet-form input:focus,
+.vnet-form select:focus {
+  outline: none;
+  border-color: #3586d6;
+  box-shadow: 0 0 0 3px rgba(53, 134, 214, 0.2);
+}
+
+.field-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-inline input {
+  flex: 1;
+}
+
+.mini-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #486581;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.mini-btn:hover {
+  background: #39536a;
+}
+
+.mini-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.create-btn {
+  background: #1f7a56;
+}
+
+.create-btn:hover {
+  background: #196345;
+}
+
+.resource-group-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.resource-group-count {
+  display: inline-flex;
+  align-items: center;
+  background: #e8f1fb;
+  color: #144063;
+  border: 1px solid #c1d7ed;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resource-group-row {
+  margin-top: 8px;
+}
+
+.hint {
+  margin-top: 2px;
+  color: #4b6176;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.error-text {
+  margin-top: 2px;
+  color: #c13232;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.success-text {
+  margin-top: 2px;
+  color: #1f7a56;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  border: 1px solid #d5e3ef;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.small-btn,
+.submit-btn,
+.reset-btn {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.small-btn {
+  padding: 8px 12px;
+  background: #1a73c7;
+  color: #fff;
+}
+
+.small-btn:hover {
+  background: #145ca0;
+}
+
+.link-btn {
+  border: none;
+  background: transparent;
+  color: #1a73c7;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.link-btn.danger {
+  color: #c13232;
+}
+
+.routing-block {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vnet-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.execute-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f3347;
+  font-size: 13px;
+  font-weight: 700;
+  margin-right: auto;
+}
+
+.execute-toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.submit-btn {
+  background: #178f5f;
+  color: #fff;
+  padding: 12px 18px;
+}
+
+.submit-btn:hover {
+  background: #13764f;
+}
+
+.auto-run-btn {
+  background: #2858e7;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+}
+
+.auto-run-btn:hover {
+  background: #1f45bf;
+}
+
+.submit-btn:disabled,
+.reset-btn:disabled,
+.small-btn:disabled,
+.auto-run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reset-btn {
+  background: #eef1f4;
+  color: #24313c;
+  border: 1px solid #c8d3dd;
+  padding: 12px 18px;
+}
+
+.reset-btn:hover {
+  background: #dde3e8;
+}
+
+.vnet-message {
+  margin: 0;
+  color: #166443;
+  font-weight: 600;
+}
+
+.vnet-error {
+  margin: 0;
+  color: #c13232;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .vnet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vnet-actions {
+    flex-direction: column;
+  }
+}

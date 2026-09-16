@@ -1,0 +1,63 @@
+.delete-dashboard-status {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.dashboard-status__badge {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.dashboard-status__badge--pending {
+  color: #f97316;
+}
+
+.dashboard-status__badge--success {
+  color: #047857;
+}
+
+.dashboard-status__badge--failed {
+  color: #b91c1c;
+}
+
+.dashboard-card {
+  padding: 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid #fbbf24;
+  background-color: #fef3c7;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.dashboard-card--failed {
+  border-color: #ef4444;
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.dashboard-card__error {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #dc2626;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.dashboard-table td {
+  border-bottom: none;
+  line-height: 1.4;
+}
+
+.dashboard-logs {
+  margin: 0;
+  padding-left: 1rem;
+  list-style: disc;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.dashboard-logs__status {
+  font-weight: 600;
+  color: #374151;
+}

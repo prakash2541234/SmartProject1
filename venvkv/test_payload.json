@@ -1,0 +1,8 @@
+{
+    "subscription_id": "your-subscription-id",
+    "appid": "test-app",
+    "environment": "production",
+    "region": "eastus",
+    "standalone": true
+}
+

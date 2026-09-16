@@ -1,0 +1,123 @@
+import React, { useEffect, useState } from "react";
+
+const Dashboard = ({ requestId }) => {
+  const [logs, setLogs] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!requestId) return;
+
+    const fetchLogs = async () => {
+      setLoading(true);
+
+      try {
+        const response = await fetch(`/api/logs/${requestId}`);
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch logs");
+        }
+
+        const data = await response.json();
+
+        setLogs(data);
+
+        // determine final status
+        const failed = data.find((log) => log.status === "failed");
+        setStatus(failed ? "failed" : "success");
+
+      } catch (err) {
+        console.error(err);
+        setStatus("failed");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [requestId]);
+
+  if (!requestId) return null;
+
+  return (
+    <div className="mt-8 p-4 border rounded shadow bg-gray-50">
+      <h2 className="text-xl font-bold mb-3">Execution Dashboard</h2>
+
+      <p className="mb-2">
+        <strong>Request ID:</strong> {requestId}
+      </p>
+
+      {loading ? (
+        <p>Loading logs...</p>
+      ) : (
+        <>
+          {/* STATUS */}
+          <div className="mb-3">
+            {status === "success" ? (
+              <span className="text-green-600 font-semibold">
+                ✅ Success
+              </span>
+            ) : (
+              <span className="text-red-600 font-semibold">
+                ❌ Failed
+              </span>
+            )}
+          </div>
+
+          {/* LOGS */}
+          <div className="bg-white p-3 border rounded max-h-60 overflow-y-auto">
+            {logs.length === 0 ? (
+              <p>No logs found</p>
+            ) : (
+              logs.map((log, index) => (
+                <div key={index} className="mb-2 text-sm">
+                  <span
+                    className={`font-semibold ${
+                      log.status === "failed"
+                        ? "text-red-500"
+                        : log.status === "success"
+                        ? "text-green-600"
+                        : "text-gray-600"
+                    }`}
+                  >
+                    [{log.status.toUpperCase()}]
+                  </span>{" "}
+                  {log.message}
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default Dashboard;
+
+
+In views.py
+def get_logs_by_request(request, request_id):
+    logs = APILog.objects.filter(request_id=request_id).values(
+        "status", "message", "timestamp"
+    )
+    return JsonResponse(list(logs), safe=False)
+
+in urls.py
+    path("logs/<str:request_id>/", get_logs_by_request),
+
+in models.py
+from django.db import models
+class APILog(models.Model):
+    request_id = models.CharField(max_length=100)
+    status = models.CharField(max_length=20)  # success / failed / info
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.request_id} - {self.status}"
+
+After pasting in models.py
+python manage.py makemigrations
+python manage.py migrate
+

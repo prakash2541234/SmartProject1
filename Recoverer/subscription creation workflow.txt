@@ -1,0 +1,2327 @@
+subscription creation workflow
+
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "actions": {
+            "base64-subpayload": {
+                "type": "Compose",
+                "inputs": "@base64(triggerBody())",
+                "runAfter": {
+                    "Set_repo_azglz_pipeline_createsub": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Query_last_commit_from_AzureDevOps": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "referenceName": "visualstudioteamservices"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "Method": "GET",
+                        "Uri": "https://dev.azure.com/STLA-LZ-DEVOPS/AZGLZ_API_Platform/_apis/git/repositories/@{variables('repo_azglz_pipeline_createsub')}/commits?searchCriteria.$top=1&searchCriteria.itemVersion.version=main"
+                    },
+                    "path": "/httprequest",
+                    "queries": {
+                        "account": "STLA-LZ-DEVOPS"
+                    }
+                },
+                "runAfter": {
+                    "base64-subpayload": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Parse_QueryLastCommit_Output": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('Query_last_commit_from_AzureDevOps')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "count": {
+                                "type": "integer"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "commitId": {
+                                            "type": "string"
+                                        },
+                                        "author": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                },
+                                                "date": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        "committer": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                },
+                                                "date": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        "comment": {
+                                            "type": "string"
+                                        },
+                                        "changeCounts": {
+                                            "type": "object",
+                                            "properties": {
+                                                "Add": {
+                                                    "type": "integer"
+                                                },
+                                                "Edit": {
+                                                    "type": "integer"
+                                                },
+                                                "Delete": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        },
+                                        "remoteUrl": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "commitId",
+                                        "author",
+                                        "committer",
+                                        "comment",
+                                        "changeCounts",
+                                        "url",
+                                        "remoteUrl"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Query_last_commit_from_AzureDevOps": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "checkin_newsubjson": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "referenceName": "visualstudioteamservices"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "Method": "POST",
+                        "Uri": "https://dev.azure.com/STLA-LZ-DEVOPS/AZGLZ_API_Platform/_apis/git/repositories/@{variables('repo_azglz_pipeline_createsub')}/pushes?api-version=7.1",
+                        "Body": "\t\t\t{\n\t\t\t  \"refUpdates\": [\n\t\t\t    {\n\t\t\t      \"name\": \"refs/heads/main\",\n\t\t\t      \"oldObjectId\": \"@{body('Parse_QueryLastCommit_Output')?['value'][0]?['commitId']}\"\n\t\t\t    }\n\t\t\t  ],\n\t\t\t  \"commits\": [\n\t\t\t    {\n\t\t\t      \"comment\": \"Initial commit.\",\n\t\t\t      \"changes\": [\n\t\t\t        {\n\t\t\t          \"changeType\": \"add\",\n\t\t\t          \"item\": {\n\t\t\t            \"path\": \"/subscriptions-data/@{triggerBody()?['subscription_name']}.json\"\n\t\t\t          },\n\t\t\t          \"newContent\": {\n\t\t\t            \"content\": \"@{outputs('base64-subpayload')}\",\n\t\t\t            \"contentType\": \"base64Encoded\"\n\t\t\t          }\n\t\t\t        }\n\t\t\t      ]\n\t\t\t    }\n\t\t\t  ]\n}"
+                    },
+                    "path": "/httprequest",
+                    "queries": {
+                        "account": "STLA-LZ-DEVOPS"
+                    }
+                },
+                "runAfter": {
+                    "Parse_QueryLastCommit_Output": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "QueueNewBuildforSubPipeline": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "referenceName": "visualstudioteamservices"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "sourceBranch": "main",
+                        "parameters": "{\n  \"subscription_name\":\"@{triggerBody()?['subscription_name']}\"\n}"
+                    },
+                    "path": "/@{encodeURIComponent('AZGLZ_API_Platform')}/_apis/build/builds",
+                    "queries": {
+                        "account": "STLA-LZ-DEVOPS",
+                        "buildDefId": "39"
+                    }
+                },
+                "runAfter": {
+                    "checkin_newsubjson": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "CI_Build_status",
+                            "type": "string",
+                            "value": "inprogress"
+                        },
+                        {
+                            "name": "releasestatus",
+                            "type": "string",
+                            "value": "inProgress"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "QueueNewBuildforSubPipeline": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Until": {
+                "type": "Until",
+                "expression": "@equals(variables('CI_Build_status'), 'completed')",
+                "limit": {
+                    "count": 30,
+                    "timeout": "PT10M"
+                },
+                "actions": {
+                    "Delay_20s": {
+                        "type": "Wait",
+                        "inputs": {
+                            "interval": {
+                                "count": 20,
+                                "unit": "Second"
+                            }
+                        }
+                    },
+                    "checkbuildstatus": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "referenceName": "visualstudioteamservices"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "Method": "GET",
+                                "Uri": "https://dev.azure.com/STLA-LZ-DEVOPS/AZGLZ_API_Platform/_apis/build/builds/@{body('QueueNewBuildforSubPipeline')?['id']}?api-version=7.2-preview.7"
+                            },
+                            "path": "/httprequest",
+                            "queries": {
+                                "account": "STLA-LZ-DEVOPS"
+                            }
+                        },
+                        "runAfter": {
+                            "Delay_20s": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    },
+                    "Parse_BuildStatusJSON": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@body('checkbuildstatus')",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "_links": {
+                                        "type": "object",
+                                        "properties": {
+                                            "self": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "href": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "web": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "href": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "sourceVersionDisplayUri": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "href": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "timeline": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "href": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "badge": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "href": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "properties": {
+                                        "type": "object",
+                                        "properties": {}
+                                    },
+                                    "tags": {
+                                        "type": "array"
+                                    },
+                                    "validationResults": {
+                                        "type": "array"
+                                    },
+                                    "plans": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "planId": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "planId"
+                                            ]
+                                        }
+                                    },
+                                    "triggerInfo": {
+                                        "type": "object",
+                                        "properties": {}
+                                    },
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "buildNumber": {
+                                        "type": "string"
+                                    },
+                                    "status": {
+                                        "type": "string"
+                                    },
+                                    "queueTime": {
+                                        "type": "string"
+                                    },
+                                    "startTime": {
+                                        "type": "string"
+                                    },
+                                    "url": {
+                                        "type": "string"
+                                    },
+                                    "definition": {
+                                        "type": "object",
+                                        "properties": {
+                                            "drafts": {
+                                                "type": "array"
+                                            },
+                                            "id": {
+                                                "type": "integer"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "uri": {
+                                                "type": "string"
+                                            },
+                                            "path": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "queueStatus": {
+                                                "type": "string"
+                                            },
+                                            "revision": {
+                                                "type": "integer"
+                                            },
+                                            "project": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "state": {
+                                                        "type": "string"
+                                                    },
+                                                    "revision": {
+                                                        "type": "integer"
+                                                    },
+                                                    "visibility": {
+                                                        "type": "string"
+                                                    },
+                                                    "lastUpdateTime": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "project": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "state": {
+                                                "type": "string"
+                                            },
+                                            "revision": {
+                                                "type": "integer"
+                                            },
+                                            "visibility": {
+                                                "type": "string"
+                                            },
+                                            "lastUpdateTime": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "uri": {
+                                        "type": "string"
+                                    },
+                                    "sourceBranch": {
+                                        "type": "string"
+                                    },
+                                    "sourceVersion": {
+                                        "type": "string"
+                                    },
+                                    "queue": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "integer"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "pool": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "isHosted": {
+                                                        "type": "boolean"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "priority": {
+                                        "type": "string"
+                                    },
+                                    "reason": {
+                                        "type": "string"
+                                    },
+                                    "requestedFor": {
+                                        "type": "object",
+                                        "properties": {
+                                            "displayName": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "_links": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "avatar": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "href": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "uniqueName": {
+                                                "type": "string"
+                                            },
+                                            "imageUrl": {
+                                                "type": "string"
+                                            },
+                                            "descriptor": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "requestedBy": {
+                                        "type": "object",
+                                        "properties": {
+                                            "displayName": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "_links": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "avatar": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "href": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "uniqueName": {
+                                                "type": "string"
+                                            },
+                                            "imageUrl": {
+                                                "type": "string"
+                                            },
+                                            "descriptor": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "lastChangedDate": {
+                                        "type": "string"
+                                    },
+                                    "lastChangedBy": {
+                                        "type": "object",
+                                        "properties": {
+                                            "displayName": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "_links": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "avatar": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "href": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "uniqueName": {
+                                                "type": "string"
+                                            },
+                                            "imageUrl": {
+                                                "type": "string"
+                                            },
+                                            "descriptor": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "parameters": {
+                                        "type": "string"
+                                    },
+                                    "orchestrationPlan": {
+                                        "type": "object",
+                                        "properties": {
+                                            "planId": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "logs": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "integer"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "repository": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "clean": {},
+                                            "checkoutSubmodules": {
+                                                "type": "boolean"
+                                            }
+                                        }
+                                    },
+                                    "retainedByRelease": {
+                                        "type": "boolean"
+                                    },
+                                    "triggeredByBuild": {},
+                                    "appendCommitMessageToRunName": {
+                                        "type": "boolean"
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "checkbuildstatus": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    },
+                    "Set_variable": {
+                        "type": "SetVariable",
+                        "inputs": {
+                            "name": "CI_Build_status",
+                            "value": "@body('Parse_BuildStatusJSON')?['status']"
+                        },
+                        "runAfter": {
+                            "Parse_BuildStatusJSON": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Condition": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@variables('CI_Build_status')",
+                                "completed"
+                            ]
+                        }
+                    ]
+                },
+                "actions": {
+                    "Create_a_new_release": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "referenceName": "visualstudioteamservices"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "Description": "PROD - Create new release for @{triggerBody()?['subscription_name']}",
+                                "IsDraft": false,
+                                "Reason": "ContinuousIntegration",
+                                "Variables": [
+                                    {
+                                        "Name": "subscription_name",
+                                        "Value": "@triggerBody()?['subscription_name']"
+                                    }
+                                ]
+                            },
+                            "path": "/@{encodeURIComponent('AZGLZ_API_Platform')}/releases",
+                            "queries": {
+                                "account": "STLA-LZ-DEVOPS",
+                                "releaseDefId": "1"
+                            }
+                        }
+                    },
+                    "Until_CompletedRelease": {
+                        "type": "Until",
+                        "expression": "@equals(variables('releasestatus'), 'succeeded')",
+                        "limit": {
+                            "count": 60,
+                            "timeout": "PT1H"
+                        },
+                        "actions": {
+                            "Delay_10s": {
+                                "type": "Wait",
+                                "inputs": {
+                                    "interval": {
+                                        "count": 10,
+                                        "unit": "Second"
+                                    }
+                                }
+                            },
+                            "Get_ReleaseStatus": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "referenceName": "visualstudioteamservices"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "Method": "GET",
+                                        "Uri": "https://vsrm.dev.azure.com/STLA-LZ-DEVOPS/AZGLZ_API_Platform/_apis/release/releases/@{body('Create_a_new_release')?['Id']}"
+                                    },
+                                    "path": "/httprequest",
+                                    "queries": {
+                                        "account": "STLA-LZ-DEVOPS"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Delay_10s": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "Parse_JSON": {
+                                "type": "ParseJson",
+                                "inputs": {
+                                    "content": "@body('Get_ReleaseStatus')",
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "integer"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "status": {
+                                                "type": "string"
+                                            },
+                                            "createdOn": {
+                                                "type": "string"
+                                            },
+                                            "modifiedOn": {
+                                                "type": "string"
+                                            },
+                                            "modifiedBy": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "displayName": {
+                                                        "type": "string"
+                                                    },
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "_links": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "avatar": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "href": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "uniqueName": {
+                                                        "type": "string"
+                                                    },
+                                                    "imageUrl": {
+                                                        "type": "string"
+                                                    },
+                                                    "descriptor": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "createdBy": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "displayName": {
+                                                        "type": "string"
+                                                    },
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "_links": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "avatar": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "href": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "uniqueName": {
+                                                        "type": "string"
+                                                    },
+                                                    "imageUrl": {
+                                                        "type": "string"
+                                                    },
+                                                    "descriptor": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "createdFor": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "displayName": {
+                                                        "type": "string"
+                                                    },
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "_links": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "avatar": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "href": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "uniqueName": {
+                                                        "type": "string"
+                                                    },
+                                                    "imageUrl": {
+                                                        "type": "string"
+                                                    },
+                                                    "descriptor": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "environments": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "integer"
+                                                        },
+                                                        "releaseId": {
+                                                            "type": "integer"
+                                                        },
+                                                        "name": {
+                                                            "type": "string"
+                                                        },
+                                                        "status": {
+                                                            "type": "string"
+                                                        },
+                                                        "variables": {
+                                                            "type": "object",
+                                                            "properties": {}
+                                                        },
+                                                        "variableGroups": {
+                                                            "type": "array"
+                                                        },
+                                                        "preDeployApprovals": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "revision": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "approvalType": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "createdOn": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "modifiedOn": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "status": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "comments": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "isAutomated": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "isNotificationOn": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "trialNumber": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "attempt": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "rank": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "release": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "id": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "url": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "_links": {
+                                                                                "type": "object",
+                                                                                "properties": {}
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "releaseDefinition": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "id": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "path": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "projectReference": {},
+                                                                            "url": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "_links": {
+                                                                                "type": "object",
+                                                                                "properties": {}
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "releaseEnvironment": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "id": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "url": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "_links": {
+                                                                                "type": "object",
+                                                                                "properties": {}
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "url": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "id",
+                                                                    "revision",
+                                                                    "approvalType",
+                                                                    "createdOn",
+                                                                    "modifiedOn",
+                                                                    "status",
+                                                                    "comments",
+                                                                    "isAutomated",
+                                                                    "isNotificationOn",
+                                                                    "trialNumber",
+                                                                    "attempt",
+                                                                    "rank",
+                                                                    "release",
+                                                                    "releaseDefinition",
+                                                                    "releaseEnvironment",
+                                                                    "url"
+                                                                ]
+                                                            }
+                                                        },
+                                                        "postDeployApprovals": {
+                                                            "type": "array"
+                                                        },
+                                                        "preApprovalsSnapshot": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "approvals": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "rank": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "isAutomated": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "isNotificationOn": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "id": {
+                                                                                "type": "integer"
+                                                                            }
+                                                                        },
+                                                                        "required": [
+                                                                            "rank",
+                                                                            "isAutomated",
+                                                                            "isNotificationOn",
+                                                                            "id"
+                                                                        ]
+                                                                    }
+                                                                },
+                                                                "approvalOptions": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "requiredApproverCount": {},
+                                                                        "releaseCreatorCanBeApprover": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "autoTriggeredAndPreviousEnvironmentApprovedCanBeSkipped": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "enforceIdentityRevalidation": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "timeoutInMinutes": {
+                                                                            "type": "integer"
+                                                                        },
+                                                                        "executionOrder": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "postApprovalsSnapshot": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "approvals": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "rank": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "isAutomated": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "isNotificationOn": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "id": {
+                                                                                "type": "integer"
+                                                                            }
+                                                                        },
+                                                                        "required": [
+                                                                            "rank",
+                                                                            "isAutomated",
+                                                                            "isNotificationOn",
+                                                                            "id"
+                                                                        ]
+                                                                    }
+                                                                },
+                                                                "approvalOptions": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "requiredApproverCount": {},
+                                                                        "releaseCreatorCanBeApprover": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "autoTriggeredAndPreviousEnvironmentApprovedCanBeSkipped": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "enforceIdentityRevalidation": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "timeoutInMinutes": {
+                                                                            "type": "integer"
+                                                                        },
+                                                                        "executionOrder": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "deploySteps": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "deploymentId": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "attempt": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "reason": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "status": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "operationStatus": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "releaseDeployPhases": {
+                                                                        "type": "array",
+                                                                        "items": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "id": {
+                                                                                    "type": "integer"
+                                                                                },
+                                                                                "phaseId": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "name": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "rank": {
+                                                                                    "type": "integer"
+                                                                                },
+                                                                                "phaseType": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "status": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "runPlanId": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "deploymentJobs": {
+                                                                                    "type": "array",
+                                                                                    "items": {
+                                                                                        "type": "object",
+                                                                                        "properties": {
+                                                                                            "job": {
+                                                                                                "type": "object",
+                                                                                                "properties": {
+                                                                                                    "id": {
+                                                                                                        "type": "integer"
+                                                                                                    },
+                                                                                                    "timelineRecordId": {
+                                                                                                        "type": "string"
+                                                                                                    },
+                                                                                                    "name": {
+                                                                                                        "type": "string"
+                                                                                                    },
+                                                                                                    "status": {
+                                                                                                        "type": "string"
+                                                                                                    },
+                                                                                                    "rank": {
+                                                                                                        "type": "integer"
+                                                                                                    },
+                                                                                                    "issues": {
+                                                                                                        "type": "array",
+                                                                                                        "items": {
+                                                                                                            "type": "object",
+                                                                                                            "properties": {
+                                                                                                                "issueType": {
+                                                                                                                    "type": "string"
+                                                                                                                },
+                                                                                                                "message": {
+                                                                                                                    "type": "string"
+                                                                                                                },
+                                                                                                                "data": {
+                                                                                                                    "type": "object",
+                                                                                                                    "properties": {}
+                                                                                                                }
+                                                                                                            },
+                                                                                                            "required": [
+                                                                                                                "issueType",
+                                                                                                                "message",
+                                                                                                                "data"
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    },
+                                                                                                    "logUrl": {
+                                                                                                        "type": "string"
+                                                                                                    }
+                                                                                                }
+                                                                                            },
+                                                                                            "tasks": {
+                                                                                                "type": "array"
+                                                                                            }
+                                                                                        },
+                                                                                        "required": [
+                                                                                            "job",
+                                                                                            "tasks"
+                                                                                        ]
+                                                                                    }
+                                                                                },
+                                                                                "manualInterventions": {
+                                                                                    "type": "array"
+                                                                                },
+                                                                                "startedOn": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            },
+                                                                            "required": [
+                                                                                "id",
+                                                                                "phaseId",
+                                                                                "name",
+                                                                                "rank",
+                                                                                "phaseType",
+                                                                                "status",
+                                                                                "runPlanId",
+                                                                                "deploymentJobs",
+                                                                                "manualInterventions",
+                                                                                "startedOn"
+                                                                            ]
+                                                                        }
+                                                                    },
+                                                                    "requestedBy": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "displayName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "url": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "_links": {
+                                                                                "type": "object",
+                                                                                "properties": {
+                                                                                    "avatar": {
+                                                                                        "type": "object",
+                                                                                        "properties": {
+                                                                                            "href": {
+                                                                                                "type": "string"
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "id": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "uniqueName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "imageUrl": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "descriptor": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "requestedFor": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "displayName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "url": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "_links": {
+                                                                                "type": "object",
+                                                                                "properties": {
+                                                                                    "avatar": {
+                                                                                        "type": "object",
+                                                                                        "properties": {
+                                                                                            "href": {
+                                                                                                "type": "string"
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "id": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "uniqueName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "imageUrl": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "descriptor": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "queuedOn": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "lastModifiedBy": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "displayName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "id": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "uniqueName": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "descriptor": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "lastModifiedOn": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "hasStarted": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "tasks": {
+                                                                        "type": "array"
+                                                                    },
+                                                                    "runPlanId": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "issues": {
+                                                                        "type": "array"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "id",
+                                                                    "deploymentId",
+                                                                    "attempt",
+                                                                    "reason",
+                                                                    "status",
+                                                                    "operationStatus",
+                                                                    "releaseDeployPhases",
+                                                                    "requestedBy",
+                                                                    "requestedFor",
+                                                                    "queuedOn",
+                                                                    "lastModifiedBy",
+                                                                    "lastModifiedOn",
+                                                                    "hasStarted",
+                                                                    "tasks",
+                                                                    "runPlanId",
+                                                                    "issues"
+                                                                ]
+                                                            }
+                                                        },
+                                                        "rank": {
+                                                            "type": "integer"
+                                                        },
+                                                        "definitionEnvironmentId": {
+                                                            "type": "integer"
+                                                        },
+                                                        "environmentOptions": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "emailNotificationType": {
+                                                                    "type": "string"
+                                                                },
+                                                                "emailRecipients": {
+                                                                    "type": "string"
+                                                                },
+                                                                "skipArtifactsDownload": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "timeoutInMinutes": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "enableAccessToken": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "publishDeploymentStatus": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "badgeEnabled": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "autoLinkWorkItems": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "pullRequestDeploymentEnabled": {
+                                                                    "type": "boolean"
+                                                                }
+                                                            }
+                                                        },
+                                                        "demands": {
+                                                            "type": "array"
+                                                        },
+                                                        "conditions": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "name": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "conditionType": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "value": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "result": {
+                                                                        "type": "boolean"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "name",
+                                                                    "conditionType",
+                                                                    "value",
+                                                                    "result"
+                                                                ]
+                                                            }
+                                                        },
+                                                        "createdOn": {
+                                                            "type": "string"
+                                                        },
+                                                        "modifiedOn": {
+                                                            "type": "string"
+                                                        },
+                                                        "workflowTasks": {
+                                                            "type": "array"
+                                                        },
+                                                        "deployPhasesSnapshot": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "deploymentInput": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "parallelExecution": {
+                                                                                "type": "object",
+                                                                                "properties": {
+                                                                                    "parallelExecutionType": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "agentSpecification": {
+                                                                                "type": "object",
+                                                                                "properties": {
+                                                                                    "identifier": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "skipArtifactsDownload": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "artifactsDownloadInput": {
+                                                                                "type": "object",
+                                                                                "properties": {
+                                                                                    "downloadInputs": {
+                                                                                        "type": "array",
+                                                                                        "items": {
+                                                                                            "type": "object",
+                                                                                            "properties": {
+                                                                                                "alias": {
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                "artifactType": {
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                "artifactDownloadMode": {
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                "artifactItems": {
+                                                                                                    "type": "array"
+                                                                                                }
+                                                                                            },
+                                                                                            "required": [
+                                                                                                "alias",
+                                                                                                "artifactType",
+                                                                                                "artifactDownloadMode",
+                                                                                                "artifactItems"
+                                                                                            ]
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "queueId": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "demands": {
+                                                                                "type": "array"
+                                                                            },
+                                                                            "enableAccessToken": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "timeoutInMinutes": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "jobCancelTimeoutInMinutes": {
+                                                                                "type": "integer"
+                                                                            },
+                                                                            "condition": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "overrideInputs": {
+                                                                                "type": "object",
+                                                                                "properties": {}
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    "rank": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "phaseType": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "name": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "refName": {},
+                                                                    "workflowTasks": {
+                                                                        "type": "array",
+                                                                        "items": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "environment": {
+                                                                                    "type": "object",
+                                                                                    "properties": {}
+                                                                                },
+                                                                                "taskId": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "version": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "name": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "refName": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "enabled": {
+                                                                                    "type": "boolean"
+                                                                                },
+                                                                                "alwaysRun": {
+                                                                                    "type": "boolean"
+                                                                                },
+                                                                                "continueOnError": {
+                                                                                    "type": "boolean"
+                                                                                },
+                                                                                "timeoutInMinutes": {
+                                                                                    "type": "integer"
+                                                                                },
+                                                                                "retryCountOnTaskFailure": {
+                                                                                    "type": "integer"
+                                                                                },
+                                                                                "definitionType": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "overrideInputs": {
+                                                                                    "type": "object",
+                                                                                    "properties": {}
+                                                                                },
+                                                                                "condition": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "inputs": {
+                                                                                    "type": "object",
+                                                                                    "properties": {
+                                                                                        "terraformVersion": {
+                                                                                            "type": "string"
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            },
+                                                                            "required": [
+                                                                                "environment",
+                                                                                "taskId",
+                                                                                "version",
+                                                                                "name",
+                                                                                "refName",
+                                                                                "enabled",
+                                                                                "alwaysRun",
+                                                                                "continueOnError",
+                                                                                "timeoutInMinutes",
+                                                                                "retryCountOnTaskFailure",
+                                                                                "definitionType",
+                                                                                "overrideInputs",
+                                                                                "condition",
+                                                                                "inputs"
+                                                                            ]
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "deploymentInput",
+                                                                    "rank",
+                                                                    "phaseType",
+                                                                    "name",
+                                                                    "refName",
+                                                                    "workflowTasks"
+                                                                ]
+                                                            }
+                                                        },
+                                                        "owner": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "displayName": {
+                                                                    "type": "string"
+                                                                },
+                                                                "url": {
+                                                                    "type": "string"
+                                                                },
+                                                                "_links": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "avatar": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "uniqueName": {
+                                                                    "type": "string"
+                                                                },
+                                                                "imageUrl": {
+                                                                    "type": "string"
+                                                                },
+                                                                "descriptor": {
+                                                                    "type": "string"
+                                                                }
+                                                            }
+                                                        },
+                                                        "schedules": {
+                                                            "type": "array"
+                                                        },
+                                                        "release": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "url": {
+                                                                    "type": "string"
+                                                                },
+                                                                "_links": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "web": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        "self": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "releaseDefinition": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "path": {
+                                                                    "type": "string"
+                                                                },
+                                                                "projectReference": {},
+                                                                "url": {
+                                                                    "type": "string"
+                                                                },
+                                                                "_links": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "web": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        "self": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "releaseCreatedBy": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "displayName": {
+                                                                    "type": "string"
+                                                                },
+                                                                "url": {
+                                                                    "type": "string"
+                                                                },
+                                                                "_links": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "avatar": {
+                                                                            "type": "object",
+                                                                            "properties": {
+                                                                                "href": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "uniqueName": {
+                                                                    "type": "string"
+                                                                },
+                                                                "imageUrl": {
+                                                                    "type": "string"
+                                                                },
+                                                                "descriptor": {
+                                                                    "type": "string"
+                                                                }
+                                                            }
+                                                        },
+                                                        "triggerReason": {
+                                                            "type": "string"
+                                                        },
+                                                        "processParameters": {
+                                                            "type": "object",
+                                                            "properties": {}
+                                                        },
+                                                        "preDeploymentGatesSnapshot": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "gatesOptions": {},
+                                                                "gates": {
+                                                                    "type": "array"
+                                                                }
+                                                            }
+                                                        },
+                                                        "postDeploymentGatesSnapshot": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "gatesOptions": {},
+                                                                "gates": {
+                                                                    "type": "array"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "id",
+                                                        "releaseId",
+                                                        "name",
+                                                        "status",
+                                                        "variables",
+                                                        "variableGroups",
+                                                        "preDeployApprovals",
+                                                        "postDeployApprovals",
+                                                        "preApprovalsSnapshot",
+                                                        "postApprovalsSnapshot",
+                                                        "deploySteps",
+                                                        "rank",
+                                                        "definitionEnvironmentId",
+                                                        "environmentOptions",
+                                                        "demands",
+                                                        "conditions",
+                                                        "createdOn",
+                                                        "modifiedOn",
+                                                        "workflowTasks",
+                                                        "deployPhasesSnapshot",
+                                                        "owner",
+                                                        "schedules",
+                                                        "release",
+                                                        "releaseDefinition",
+                                                        "releaseCreatedBy",
+                                                        "triggerReason",
+                                                        "processParameters",
+                                                        "preDeploymentGatesSnapshot",
+                                                        "postDeploymentGatesSnapshot"
+                                                    ]
+                                                }
+                                            },
+                                            "variables": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "subscription_name": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "allowOverride": {
+                                                                "type": "boolean"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "variableGroups": {
+                                                "type": "array"
+                                            },
+                                            "artifacts": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "sourceId": {
+                                                            "type": "string"
+                                                        },
+                                                        "type": {
+                                                            "type": "string"
+                                                        },
+                                                        "alias": {
+                                                            "type": "string"
+                                                        },
+                                                        "definitionReference": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "artifactSourceDefinitionUrl": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "branches": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "buildUri": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "definition": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "IsMultiDefinitionType": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "IsXamlBuildArtifactType": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "project": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "repository.provider": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "repository": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "requestedFor": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "requestedForId": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "sourceVersion": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {}
+                                                                    }
+                                                                },
+                                                                "version": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "branch": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "artifactSourceVersionUrl": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "isPrimary": {
+                                                            "type": "boolean"
+                                                        },
+                                                        "isRetained": {
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "sourceId",
+                                                        "type",
+                                                        "alias",
+                                                        "definitionReference",
+                                                        "isPrimary",
+                                                        "isRetained"
+                                                    ]
+                                                }
+                                            },
+                                            "releaseDefinition": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "projectReference": {},
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "_links": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "self": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "href": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "web": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "href": {
+                                                                        "type": "string"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "releaseDefinitionRevision": {
+                                                "type": "integer"
+                                            },
+                                            "description": {
+                                                "type": "string"
+                                            },
+                                            "reason": {
+                                                "type": "string"
+                                            },
+                                            "releaseNameFormat": {
+                                                "type": "string"
+                                            },
+                                            "keepForever": {
+                                                "type": "boolean"
+                                            },
+                                            "definitionSnapshotRevision": {
+                                                "type": "integer"
+                                            },
+                                            "logsContainerUrl": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "_links": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "self": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "href": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "web": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "href": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "tags": {
+                                                "type": "array"
+                                            },
+                                            "triggeringArtifactAlias": {},
+                                            "projectReference": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "name": {}
+                                                }
+                                            },
+                                            "properties": {
+                                                "type": "object",
+                                                "properties": {}
+                                            }
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_ReleaseStatus": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "Set_releasestatus": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "releasestatus",
+                                    "value": "@outputs('Parse_JSON')?['body']?['environments'][0]?['status']"
+                                },
+                                "runAfter": {
+                                    "Parse_JSON": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Create_a_new_release": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    },
+                    "Condition_1": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "equals": [
+                                        "@variables('releasestatus')",
+                                        "succeeded"
+                                    ]
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Response": {
+                                "type": "Response",
+                                "kind": "Http",
+                                "inputs": {
+                                    "statusCode": 200,
+                                    "body": "Build and release pipeline was successfully ran for @{triggerBody()?['subscription_name']}, please review the newly created subscription."
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "Response500Release": {
+                                    "type": "Response",
+                                    "kind": "Http",
+                                    "inputs": {
+                                        "statusCode": 500,
+                                        "body": "Release pipeline encountered error during ran for @{triggerBody()?['subscription_name']}, please review craeteasubscriptionflow."
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Until_CompletedRelease": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Response500build": {
+                            "type": "Response",
+                            "kind": "Http",
+                            "inputs": {
+                                "statusCode": 500,
+                                "body": "Build pipeline encountered error during ran for @{triggerBody()?['subscription_name']}, please review craeteasubscriptionflow."
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Until": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Set_repo_azglz_pipeline_createsub": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "repo_azglz_pipeline_createsub",
+                            "type": "string",
+                            "value": "b18e1d14-4276-4b41-b4e0-193000f45566"
+                        }
+                    ]
+                },
+                "runAfter": {}
+            }
+        },
+        "outputs": {},
+        "triggers": {
+            "HTTP_request_with_Sub_payload": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "subscription_name": {
+                                "type": "string"
+                            },
+                            "subscription_mgmtgroup": {
+                                "type": "string"
+                            },
+                            "subscription_tags": {
+                                "type": "object",
+                                "properties": {
+                                    "stla_application_id": {
+                                        "type": "string"
+                                    },
+                                    "stla_hle_usd": {
+                                        "type": "string"
+                                    },
+                                    "stla_support_email": {
+                                        "type": "string"
+                                    },
+                                    "stla_environment": {
+                                        "type": "string"
+                                    },
+                                    "stla_global_business": {
+                                        "type": "string"
+                                    },
+                                    "stla_global_subfunction": {
+                                        "type": "string"
+                                    },
+                                    "stla_sensitivity": {
+                                        "type": "string"
+                                    },
+                                    "stla_multi_tenant": {
+                                        "type": "string"
+                                    },
+                                    "stla_purchase_date": {
+                                        "type": "string"
+                                    },
+                                    "stla_region": {
+                                        "type": "string"
+                                    },
+                                    "stla_network_domain": {
+                                        "type": "string"
+                                    },
+                                    "stla_model_deployment": {
+                                        "type": "string"
+                                    },
+                                    "stla_application_source": {
+                                        "type": "string"
+                                    },
+                                    "stla_application_name": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "kind": "Stateful"
+}

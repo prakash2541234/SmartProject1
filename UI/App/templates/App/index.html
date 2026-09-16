@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog and RITM Lookup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: #101424;
+            color: #f2f4ff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 16px;
+        }
+
+        .top-floating {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(1000px, 92vw);
+            display: flex;
+            gap: 14px;
+            z-index: 1;
+        }
+
+        .float-box {
+            height: 26px;
+            border-radius: 10px;
+            animation: float 4s ease-in-out infinite;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+        }
+
+        .float-box.orange {
+            flex: 1;
+            background: #ff8b22;
+        }
+
+        .float-box.blue {
+            flex: 1.2;
+            background: #2f83ff;
+            animation-delay: 0.8s;
+        }
+
+        .float-box.orange-alt {
+            flex: 0.8;
+            background: #ff7b00;
+            animation-delay: 1.4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 2;
+            width: min(1000px, 96vw);
+            background: #181e34;
+            border-radius: 14px;
+            box-shadow: 0 0 16px rgba(127, 0, 255, 0.9);
+            padding: 26px;
+            margin-top: 44px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 32px;
+            margin-bottom: 22px;
+            font-weight: 800;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid #485684;
+            background: #0f1529;
+            color: #f2f4ff;
+            padding: 0 10px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #2f83ff;
+            box-shadow: 0 0 0 3px rgba(47, 131, 255, 0.2);
+        }
+
+        button {
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: #2f83ff;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .refresh-toggle {
+            height: 40px;
+            border: 1px solid #485684;
+            border-radius: 8px;
+            background: #0f1529;
+            color: #f2f4ff;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0 12px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(255, 123, 0, 0.18);
+            color: #ffd7ba;
+            border: 1px solid rgba(255, 123, 0, 0.45);
+        }
+
+        .news-ticker {
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #0f1529;
+            border: 1px solid #2f4f93;
+            box-shadow: 0 0 12px rgba(47, 131, 255, 0.25);
+        }
+
+        .news-ticker-track {
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+            flex: 1;
+            min-height: 22px;
+        }
+
+        .news-ticker-message {
+            position: absolute;
+            left: 100%;
+            top: 0;
+            animation: ticker-scroll 18s linear infinite;
+            color: #cfe1ff;
+            font-weight: 600;
+        }
+
+        .news-ticker-timer {
+            font-family: Consolas, Monaco, monospace;
+            font-weight: 700;
+            color: #f2f4ff;
+            min-width: 130px;
+            text-align: right;
+        }
+
+        @keyframes ticker-scroll {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(-220%);
+            }
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid #35436f;
+            background: #10182f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #10182f;
+            min-width: 1200px;
+        }
+
+        th, td {
+            text-align: left;
+            border-bottom: 1px solid #2c3a64;
+            padding: 14px 12px;
+            font-size: 15px;
+            white-space: normal;
+            vertical-align: middle;
+        }
+
+        th {
+            background: #1f2a4f;
+            color: #cfe1ff;
+            font-size: 16px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .status-completed {
+            background: #22c55e;
+            color: #ffffff;
+        }
+
+        .status-success {
+            background: #22c55e;
+            color: #ffffff;
+        }
+
+        .status-inprogress {
+            background: #f7e3ab;
+            color: #8a5a00;
+        }
+
+        .status-pending {
+            background: #d4d7dd;
+            color: #2a3548;
+        }
+
+        .status-failed {
+            background: #ffd2d2;
+            color: #8a1f1f;
+        }
+
+        .status-skipped {
+            background: #d9d5f5;
+            color: #3a2d88;
+        }
+
+        .monitor-title {
+            font-weight: 600;
+        }
+
+        .global-status {
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .loading-indicator {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #cfe1ff;
+            font-size: 14px;
+        }
+
+        .loading-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #2f83ff;
+            box-shadow: 0 0 0 0 rgba(47, 131, 255, 0.8);
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(47, 131, 255, 0.8); }
+            100% { box-shadow: 0 0 0 10px rgba(47, 131, 255, 0); }
+        }
+
+        .json-cell {
+            min-width: 260px;
+            max-width: 320px;
+            white-space: normal;
+        }
+
+        .json-preview {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            background: #0a0f20;
+            border: 1px solid #2f3f6f;
+            border-radius: 8px;
+            color: #d9e8ff;
+            padding: 8px;
+            max-height: 48px;
+            overflow: auto;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            transition: max-height 0.2s ease;
+        }
+
+        details.json-details {
+            border: 1px solid #2f3f6f;
+            border-radius: 8px;
+            background: #0a0f20;
+            padding: 6px;
+        }
+
+        details.json-details > summary {
+            cursor: pointer;
+            color: #cfe1ff;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .section-title {
+            margin-top: 22px;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: 800;
+            color: #cfe1ff;
+        }
+
+        .monitor-col {
+            width: 140px;
+            font-weight: 700;
+        }
+
+        .status-col {
+            width: 170px;
+        }
+
+        .details-col {
+            min-width: 280px;
+        }
+
+        .json-col {
+            min-width: 360px;
+        }
+
+        .json-details {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .json-details > summary {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 0;
+        }
+
+        .json-details > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .json-details[open] .json-preview {
+            max-height: 160px;
+        }
+
+        .json-preview {
+            max-height: 58px;
+            margin-top: 8px;
+        }
+
+        .json-viewer {
+            margin: 0;
+            padding: 12px 14px;
+            border-radius: 10px;
+            overflow: auto;
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #d9e8ff;
+            background: #0a0f20;
+            border: 1px solid #2f3f6f;
+            max-height: 58px;
+        }
+
+        .status-success {
+            background: #22c55e;
+            color: #ffffff;
+        }
+
+        .status-failed {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+        .status-pending {
+            background: #d4d7dd;
+            color: #2a3548;
+        }
+
+        .status-in-progress {
+            background: #f7e3ab;
+            color: #8a5a00;
+        }
+
+    </style>
+</head>
+<body>
+    {% load app_extras %}
+    <div class="top-floating">
+        <div class="float-box orange"></div>
+        <div class="float-box blue"></div>
+        <div class="float-box orange-alt"></div>
+    </div>
+
+    <main class="container">
+        <h1>Catalog SysID + RITM Lookup</h1>
+
+        <form
+            id="lookup-form"
+            method="post"
+            data-searched="{{ searched|yesno:'true,false' }}"
+            data-refresh-needed="{{ refresh_needed|yesno:'true,false' }}"
+            data-poll-url="{% url 'poll_lookup' %}"
+        >
+            {% csrf_token %}
+            <div class="field">
+                <label for="catalog_sysid">Catalog SysID</label>
+                <input id="catalog_sysid" name="catalog_sysid" value="{{ catalog_sysid }}" required>
+            </div>
+
+            <div class="field">
+                <label for="ritm_number">RITM Number</label>
+                <input id="ritm_number" name="ritm_number" value="{{ ritm_number }}" required>
+            </div>
+
+            <button type="submit">Submit</button>
+        </form>
+
+        <div
+            id="monitor-ticker"
+            class="news-ticker"
+            {% if not searched or not catalog_sysid or not ritm_number %}style="display:none;"{% endif %}
+            data-completed="{{ completed_monitors }}"
+            data-total="{{ total_monitors }}"
+            data-global-status="{{ global_status }}"
+            data-refresh-needed="{{ refresh_needed|yesno:'true,false' }}"
+        >
+            <div class="news-ticker-track">
+                <span id="monitor-ticker-message" class="news-ticker-message"></span>
+            </div>
+            <div class="news-ticker-timer">Time: <span id="overall-timer-value">00:00</span></div>
+        </div>
+        <div id="global-status" class="global-status" {% if not searched %}style="display:none;"{% endif %}>
+            <span>Global Status:</span>
+            <span id="global-status-badge" class="status-badge status-{{ global_status|lower }}">{{ global_status }}</span>
+        </div>
+
+        <div id="loading-indicator" class="loading-indicator" {% if not refresh_needed %}style="display:none;"{% endif %}>
+            <span class="loading-dot"></span>
+            <span>Loading monitor updates...</span>
+        </div>
+
+        <button
+            id="refresh-toggle"
+            class="refresh-toggle"
+            type="button"
+            {% if not refresh_needed %}style="display:none;"{% endif %}
+        >Pause Auto-Refresh</button>
+
+        <div id="error-message" class="message" {% if not error %}style="display:none;"{% endif %}>{{ error }}</div>
+
+        <h2 class="section-title" {% if not searched %}style="display:none;"{% endif %}>Monitor Summary</h2>
+        <div id="empty-monitor-message" class="message" {% if monitors %}style="display:none;"{% endif %}>Waiting for monitors to start...</div>
+        <div id="monitor-table-wrap" class="table-wrap" {% if not monitors %}style="display:none;"{% endif %}>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="monitor-col">Monitor</th>
+                        <th class="status-col">Status</th>
+                        <th class="details-col">Details</th>
+                        <th class="json-col">Status Viewer (JSON)</th>
+                    </tr>
+                </thead>
+                <tbody id="monitor-table-body">
+                    {% for monitor in monitors %}
+                        <tr data-monitor-id="{{ monitor.id }}" data-status="{{ monitor.status|lower }}" data-payload="{{ monitor.payload|to_json|escapejs }}">
+                            <td class="monitor-title">{{ monitor.monitor }}</td>
+                            <td><span class="status-badge status-{{ monitor.status|lower }}">{% if monitor.status == 'PENDING' %}Waiting for response{% else %}{{ monitor.status }}{% endif %}</span></td>
+                            <td>{{ monitor.details }}</td>
+                            <td><details class="json-details"><summary>View Payload</summary><pre class="json-viewer">{{ monitor.payload|to_json|escape }}</pre></details></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if searched and not error and total_monitors == 0 %}
+            <div class="message">No monitors configured. Check environment variables.</div>
+        {% endif %}
+    </main>
+    <script>
+        (function () {
+            const form = document.getElementById('lookup-form');
+            if (!form) {
+                return;
+            }
+
+            const searched = form.dataset.searched === 'true';
+            const refreshNeeded = form.dataset.refreshNeeded === 'true';
+            const pollUrl = form.dataset.pollUrl;
+            const catalogInput = document.getElementById('catalog_sysid');
+            const ritmInput = document.getElementById('ritm_number');
+            const monitorTicker = document.getElementById('monitor-ticker');
+            const monitorTickerMessage = document.getElementById('monitor-ticker-message');
+            const overallTimerValue = document.getElementById('overall-timer-value');
+            const errorMessage = document.getElementById('error-message');
+            const globalStatusBadge = document.getElementById('global-status-badge');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const emptyMonitorMessage = document.getElementById('empty-monitor-message');
+            const monitorTableWrap = document.getElementById('monitor-table-wrap');
+            const monitorTableBody = document.getElementById('monitor-table-body');
+
+            if (!searched || !catalogInput || !ritmInput) {
+                return;
+            }
+
+            if (!catalogInput.value.trim() || !ritmInput.value.trim()) {
+                return;
+            }
+
+            const toggleButton = document.getElementById('refresh-toggle');
+            let isRunning = refreshNeeded;
+            let requestInFlight = false;
+
+            const tickerState = {
+                completed: Number(monitorTicker ? monitorTicker.dataset.completed : 0) || 0,
+                total: Number(monitorTicker ? monitorTicker.dataset.total : 0) || 0,
+                globalStatus: monitorTicker ? (monitorTicker.dataset.globalStatus || 'PENDING') : 'PENDING',
+                refreshNeeded: monitorTicker ? (monitorTicker.dataset.refreshNeeded === 'true') : false,
+            };
+
+            const overallTimer = {
+                startMs: Date.now(),
+                finalSeconds: null,
+            };
+
+            function formatDuration(totalSeconds) {
+                const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+                const minutes = Math.floor(safeSeconds / 60);
+                const seconds = safeSeconds % 60;
+                return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+            }
+
+            function getOverallElapsedSeconds() {
+                if (overallTimer.finalSeconds !== null) {
+                    return overallTimer.finalSeconds;
+                }
+                return Math.max(0, Math.floor((Date.now() - overallTimer.startMs) / 1000));
+            }
+
+            function renderTicker() {
+                if (!monitorTicker || !monitorTickerMessage) {
+                    return;
+                }
+
+                monitorTicker.style.display = '';
+                const timerText = formatDuration(getOverallElapsedSeconds());
+
+                if (overallTimerValue) {
+                    overallTimerValue.textContent = timerText;
+                }
+
+                const refreshText = tickerState.refreshNeeded
+                    ? 'Auto-refresh is active (every 5 seconds) while monitors are pending.'
+                    : 'Monitor processing is complete. Auto-refresh has stopped.';
+
+                monitorTickerMessage.textContent = tickerState.completed + ' out of ' + tickerState.total + ' completed. | ' + refreshText;
+            }
+
+            renderTicker();
+            const overallTimerIntervalId = setInterval(renderTicker, 1000);
+
+            function statusLabel(status) {
+                if (status === 'PENDING') {
+                    return 'Waiting for response';
+                }
+                return status || 'PENDING';
+            }
+
+            function statusClass(status) {
+                const safe = (status || 'PENDING').toLowerCase();
+                return 'status-badge status-' + safe;
+            }
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function formatJson(obj) {
+                try {
+                    return JSON.stringify(obj, null, 2);
+                } catch (e) {
+                    return String(obj || '');
+                }
+            }
+
+            function normalizeMonitorRow(row) {
+                const monitorId = String(row && row.id ? row.id : '');
+                const status = row && row.status ? row.status : 'PENDING';
+                const statusDisplay = statusLabel(status);
+                const statusLower = String(status).toLowerCase();
+                const monitorName = row && (row.monitor || row.name) ? (row.monitor || row.name) : 'Unnamed Monitor';
+                const details = row && row.details ? row.details : '';
+                const payloadJson = formatJson(row && row.payload ? row.payload : {});
+
+                return {
+                    monitorId: monitorId,
+                    status: status,
+                    statusDisplay: statusDisplay,
+                    statusLower: statusLower,
+                    monitorName: monitorName,
+                    details: details,
+                    payloadJson: payloadJson,
+                };
+            }
+
+            function buildMonitorRowHtml(row, keepOpen) {
+                const normalized = normalizeMonitorRow(row);
+                const openAttr = keepOpen ? ' open' : '';
+
+                return '<td class="monitor-title">' + escapeHtml(normalized.monitorName) + '</td>' +
+                    '<td><span class="' + statusClass(normalized.status) + '">' + escapeHtml(normalized.statusDisplay) + '</span></td>' +
+                    '<td>' + escapeHtml(normalized.details) + '</td>' +
+                    '<td><details class="json-details"' + openAttr + '><summary>View Payload</summary><pre class="json-viewer">' + escapeHtml(normalized.payloadJson) + '</pre></details></td>';
+            }
+
+            function applyRowData(rowElement, row) {
+                if (!rowElement) {
+                    return;
+                }
+
+                const normalized = normalizeMonitorRow(row);
+                const keepOpen = !!rowElement.querySelector('details.json-details[open]');
+
+                rowElement.setAttribute('data-monitor-id', normalized.monitorId);
+                rowElement.setAttribute('data-status', normalized.statusLower);
+                rowElement.innerHTML = buildMonitorRowHtml(row, keepOpen);
+            }
+
+            function renderMonitorRows(rows) {
+                if (!monitorTableBody || !monitorTableWrap || !emptyMonitorMessage) {
+                    return;
+                }
+
+                const list = Array.isArray(rows) ? rows : [];
+                if (!list.length) {
+                    monitorTableBody.innerHTML = '';
+                    monitorTableWrap.style.display = 'none';
+                    emptyMonitorMessage.style.display = '';
+                    return;
+                }
+
+                monitorTableWrap.style.display = '';
+                emptyMonitorMessage.style.display = 'none';
+
+                monitorTableBody.innerHTML = '';
+                list.forEach(function (row) {
+                    const rowElement = document.createElement('tr');
+                    applyRowData(rowElement, row);
+                    monitorTableBody.appendChild(rowElement);
+                });
+            }
+
+            function updatePendingMonitorRows(rows) {
+                if (!monitorTableBody) {
+                    return;
+                }
+
+                const list = Array.isArray(rows) ? rows : [];
+                const rowsById = new Map(list.map(function (row) {
+                    return [String(row && row.id ? row.id : ''), row];
+                }));
+
+                Array.from(monitorTableBody.querySelectorAll('tr[data-monitor-id]')).forEach(function (rowElement) {
+                    const currentStatus = String(rowElement.getAttribute('data-status') || 'pending').toLowerCase();
+                    if (currentStatus !== 'pending') {
+                        return;
+                    }
+
+                    const monitorId = String(rowElement.getAttribute('data-monitor-id') || '');
+                    if (!rowsById.has(monitorId)) {
+                        return;
+                    }
+
+                    applyRowData(rowElement, rowsById.get(monitorId));
+                });
+            }
+
+            function closeOpenJsonViewers(exceptDetails) {
+                if (!monitorTableBody) {
+                    return;
+                }
+
+                monitorTableBody.querySelectorAll('details.json-details[open]').forEach(function (details) {
+                    if (details !== exceptDetails) {
+                        details.open = false;
+                    }
+                });
+            }
+
+            if (monitorTableBody) {
+                monitorTableBody.addEventListener('click', function (event) {
+                    const summary = event.target.closest('summary');
+                    if (!summary || !monitorTableBody.contains(summary)) {
+                        return;
+                    }
+
+                    const details = summary.closest('details.json-details');
+                    if (!details) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    const shouldOpen = !details.open;
+                    closeOpenJsonViewers(details);
+                    details.open = shouldOpen;
+                });
+            }
+
+            function updateProgress(completedCount, totalCount, globalStatus, refreshStillNeeded) {
+                tickerState.completed = completedCount;
+                tickerState.total = totalCount;
+                tickerState.globalStatus = globalStatus || 'PENDING';
+                tickerState.refreshNeeded = refreshStillNeeded;
+                renderTicker();
+
+                if (globalStatusBadge) {
+                    globalStatusBadge.className = statusClass(tickerState.globalStatus);
+                    globalStatusBadge.textContent = tickerState.globalStatus;
+                }
+
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = refreshStillNeeded ? '' : 'none';
+                }
+
+                if (toggleButton) {
+                    if (refreshStillNeeded) {
+                        toggleButton.style.display = '';
+                    } else {
+                        toggleButton.style.display = 'none';
+                    }
+                }
+            }
+
+            async function pollSections() {
+                if (!isRunning || requestInFlight) {
+                    return;
+                }
+
+                requestInFlight = true;
+                try {
+                    const formData = new FormData(form);
+
+                    const response = await fetch(pollUrl, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    if (errorMessage) {
+                        if (data.error) {
+                            errorMessage.style.display = '';
+                            errorMessage.textContent = data.error;
+                        } else {
+                            errorMessage.style.display = 'none';
+                            errorMessage.textContent = '';
+                        }
+                    }
+
+                    if (Array.isArray(data.monitors)) {
+                        if (monitorTableBody && monitorTableBody.children.length) {
+                            updatePendingMonitorRows(data.monitors);
+                        } else {
+                            renderMonitorRows(data.monitors);
+                        }
+                    }
+
+                    updateProgress(
+                        data.completed_monitors || 0,
+                        data.total_monitors || 0,
+                        data.global_status || data.overall_status || 'PENDING',
+                        !!data.refresh_needed
+                    );
+
+                    if (!data.refresh_needed) {
+                        isRunning = false;
+                        if (overallTimer.finalSeconds === null) {
+                            overallTimer.finalSeconds = Math.max(0, Math.floor((Date.now() - overallTimer.startMs) / 1000));
+                            renderTicker();
+                        }
+                        if (toggleButton) {
+                            toggleButton.textContent = 'Resume Auto-Refresh';
+                        }
+                    }
+                } catch (error) {
+                    if (errorMessage) {
+                        errorMessage.style.display = '';
+                        errorMessage.textContent = 'Unable to refresh monitor data.';
+                    }
+                } finally {
+                    requestInFlight = false;
+                }
+            }
+
+            const intervalId = setInterval(function () {
+                pollSections();
+            }, 5000);
+
+            if (!toggleButton) {
+                return;
+            }
+
+            toggleButton.addEventListener('click', function () {
+                isRunning = !isRunning;
+                toggleButton.textContent = isRunning ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh';
+            });
+
+            window.addEventListener('beforeunload', function () {
+                clearInterval(intervalId);
+                clearInterval(overallTimerIntervalId);
+            });
+
+            renderMonitorRows(Array.from(monitorTableBody ? monitorTableBody.querySelectorAll('tr') : []).map(function (row) {
+                const cells = row.children;
+                let payload = {};
+                try {
+                    const payloadStr = row.getAttribute('data-payload');
+                    if (payloadStr) {
+                        payload = JSON.parse(payloadStr);
+                    }
+                } catch (e) {
+                    payload = {};
+                }
+                return {
+                    id: row.getAttribute('data-monitor-id') || '',
+                    monitor: cells[0] ? cells[0].textContent : '',
+                    name: cells[0] ? cells[0].textContent : '',
+                    details: cells[2] ? cells[2].textContent : '',
+                    status: row.getAttribute('data-status') || 'PENDING',
+                    payload: payload
+                };
+            }));
+        })();
+    </script>
+</body>
+</html>

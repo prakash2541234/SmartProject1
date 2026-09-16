@@ -1,0 +1,44 @@
+You are GitHub Copilot in VS Code. Make this current folder fully ready for Azure App Service (Linux) deployment, end-to-end, with zero manual coding from me.
+
+Goal:
+- Deploy this project successfully on Azure App Service Linux.
+- Fix all deployment/runtime issues you find.
+- Keep going until app startup works and all critical errors are resolved.
+
+What you must do automatically:
+1) Detect project type (Django first; if not Django, adapt correctly).
+2) Audit and fix deployment files:
+   - requirements.txt
+   - runtime.txt (set compatible Python version)
+   - startup command strategy (prefer startup.sh with robust path detection)
+   - any needed app server entrypoint (gunicorn/wsgi/asgi)
+3) For Django projects, ensure:
+   - production-safe settings for Azure
+   - ALLOWED_HOSTS/env handling
+   - static files config (WhiteNoise if needed)
+   - collectstatic/migrate support in startup flow
+   - WSGI import path works from Azure extracted paths (/tmp/... and /home/site/wwwroot)
+4) Fix startup.sh so it auto-detects real app directory and does not fail with missing manage.py.
+5) Eliminate common Azure errors:
+   - ModuleNotFoundError for project module
+   - startup script not found
+   - wrong chdir path
+   - Python version mismatch with Django/dependencies
+6) Validate locally as much as possible:
+   - dependency install
+   - manage.py checks
+   - import/startup checks
+7) Update deployment documentation with:
+   - exact Startup Command to set in Azure
+   - required App Settings/env vars
+   - quick troubleshooting for startup/module/path issues
+8) Show final output in 4 parts:
+   - What changed
+   - Exact Azure Startup Command (single final command)
+   - Required Azure settings
+   - Verification checklist after deployment
+
+Constraints:
+- Make focused, minimal, production-safe changes.
+- Do not stop at analysis—apply fixes directly.
+- If a blocker appears, resolve it and continue.

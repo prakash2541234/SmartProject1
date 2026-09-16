@@ -1,0 +1,89 @@
+You are GitHub Copilot in VS Code. Make this current project (React frontend + Django backend) fully ready for Azure App Service (Linux) deployment, end-to-end, with zero manual coding from me.
+
+Primary goal:
+- Deploy successfully on Azure with Django serving API and React build as frontend static assets.
+- Fix all deployment/runtime/build/path issues automatically.
+- Continue until startup is stable and critical errors are resolved.
+
+What you must do automatically:
+
+1) Detect structure and map components
+- Identify Django backend root (manage.py, settings.py, wsgi/asgi).
+- Identify React frontend root (package.json, src/, build config).
+- Confirm final deployment topology:
+  - Preferred: Django serves React build (single App Service).
+  - If structure requires another approach, implement the simplest production-safe variant and document it.
+
+2) Backend hardening for Azure
+- Audit/fix:
+  - requirements.txt
+  - runtime.txt (Python version compatible with Django + deps)
+  - startup.sh
+  - gunicorn entrypoint (UI.wsgi:application or correct module)
+- Configure Django production settings:
+  - DEBUG from env
+  - SECRET_KEY from env
+  - ALLOWED_HOSTS from env (include azurewebsites host pattern support)
+  - WhiteNoise/static settings for production
+  - CORS/CSRF trusted origins for frontend host (if needed)
+- Ensure collectstatic and migrate can run during startup safely.
+
+3) Frontend build integration
+- Install frontend dependencies and produce production build.
+- Wire React build output into Django static/template serving path correctly.
+- Ensure Django routes serve React index for non-API client routes (without breaking API/admin paths).
+- Handle static file paths and cache-safe asset loading in production.
+
+4) Startup reliability on Azure Linux
+- Implement robust startup.sh that:
+  - Works whether app is extracted in /tmp/... by Oryx or in /home/site/wwwroot
+  - Auto-detects real app directory via APP_PATH and fallback paths
+  - Fails with clear error if manage.py is missing
+  - Exports correct PYTHONPATH
+  - Runs migrate + collectstatic (or safe conditional flow)
+  - Starts gunicorn with correct --chdir and module
+- Prevent known failures:
+  - ModuleNotFoundError for Django project package
+  - bash startup.sh not found
+  - wrong chdir path
+  - missing frontend static files
+  - Python version mismatch
+
+5) Azure configuration outputs
+- Provide the exact single Startup Command for App Service.
+- Provide required Azure App Settings (name/value placeholders), including:
+  - DEBUG
+  - SECRET_KEY
+  - ALLOWED_HOSTS
+  - CSRF/CORS related settings (if used)
+- Ensure guidance matches actual project paths/files after your edits.
+
+6) Validation and error resolution
+- Run local checks where possible:
+  - pip install -r requirements.txt
+  - Django checks/manage.py commands
+  - React build command
+  - import and startup sanity checks
+- If errors appear, fix them and re-validate.
+- Do not stop at first fix; iterate until clean startup path is established.
+
+7) Documentation update
+- Update/create DEPLOYMENT.md with:
+  - architecture summary (React + Django on one App Service)
+  - exact build/deploy flow
+  - exact Startup Command
+  - required Azure settings
+  - troubleshooting section for path/import/static/build issues
+
+Output format required at the end (exactly these sections):
+1. What changed
+2. Final Azure Startup Command (single value to paste)
+3. Required Azure App Settings
+4. Deploy verification checklist
+5. Known limitations or follow-ups (if any)
+
+Constraints:
+- Make focused, minimal, production-safe changes.
+- Do not ask me to manually edit files unless absolutely unavoidable.
+- Do not stop at analysis; implement fixes directly.
+- Keep going until the project is deployment-ready for Azure App Service Linux.

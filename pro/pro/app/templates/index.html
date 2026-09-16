@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stego App</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f4f4f4;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        input, textarea {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+
+        .progress-bar {
+            height: 25px;
+            width: 0%;
+            background: green;
+            color: white;
+            text-align: center;
+        }
+
+        .pipeline-step {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background: #eee;
+        }
+
+        .done { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- Tabs -->
+    <button onclick="showEnc()">Encryption</button>
+    <button onclick="showDec()">Decryption</button>
+
+    <!-- ================= ENCRYPTION ================= -->
+    <div id="encSection">
+        <h2>Encryption</h2>
+
+        <form id="encForm">
+            <input type="file" name="cover_image" required>
+            <input type="file" name="secret_image" required>
+            <button type="submit">Encrypt</button>
+        </form>
+
+        <div class="progress-bar" id="progress">0%</div>
+
+        <div id="encPipeline"></div>
+
+        <h3>Output</h3>
+        <img id="stegoImg" width="300"><br>
+
+        <label>Metadata</label>
+        <textarea id="metadata"></textarea>
+
+        <label>Private Key</label>
+        <textarea id="private_key"></textarea>
+    </div>
+
+    <!-- ================= DECRYPTION ================= -->
+
+    <!-- ================= DECRYPTION ================= -->
+    <div id="decSection" style="display:none;">
+        <h2>Decryption</h2>
+
+        <input type="file" id="stego_input">
+        <textarea id="dec_metadata" placeholder="Paste metadata here"></textarea>
+        <textarea id="dec_private_key" placeholder="Paste private key here"></textarea>
+
+        <!-- ✅ NORMAL DECRYPT -->
+        <button id="decryptBtn">Decrypt</button>
+
+        <!-- ✅ AUTO DECRYPT (NEW BUTTON ADDED) -->
+        <button id="autoDecryptBtn">Auto Decrypt</button>
+
+        <div id="decPipeline"></div>
+
+        <h3>Recovered Image</h3>
+        <img id="recoveredImg" width="300">
+    </div>
+
+</div>
+
+<script>
+/* ================= TAB SWITCH ================= */
+function showEnc() {
+    document.getElementById('encSection').style.display = 'block';
+    document.getElementById('decSection').style.display = 'none';
+}
+
+function showDec() {
+    document.getElementById('encSection').style.display = 'none';
+    document.getElementById('decSection').style.display = 'block';
+}
+
+
+/* ================= ENCRYPTION ================= */
+document.getElementById('encForm').onsubmit = async (e) => {
+    e.preventDefault();
+
+    const progress = document.getElementById('progress');
+    const pipeline = document.getElementById('encPipeline');
+
+    pipeline.innerHTML = "";
+
+    function step(msg, percent) {
+        progress.style.width = percent + "%";
+        progress.innerText = percent + "%";
+
+        const div = document.createElement("div");
+        div.className = "pipeline-step done";
+        div.innerText = msg;
+        pipeline.appendChild(div);
+    }
+
+    step("📥 Reading images", 10);
+
+    const res = await fetch('/encryption/', {
+        method: 'POST',
+        body: new FormData(e.target)
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'success') {
+        step("🌪️ Scrambling", 30);
+        step("🗜️ Compression", 50);
+        step("🔐 Encryption (AES + RSA)", 70);
+        step("🛡️ Error correction", 85);
+        step("🖼️ Embedding", 100);
+
+        document.getElementById('stegoImg').src =
+            "data:image/png;base64," + data.stego_image;
+
+        document.getElementById('metadata').value =
+            JSON.stringify(data.metadata);
+
+        document.getElementById('private_key').value =
+            data.private_key || "Handled on server";
+
+    } else {
+        progress.style.background = "red";
+        progress.innerText = "Error";
+
+        const div = document.createElement("div");
+        div.className = "pipeline-step error";
+        div.innerText = data.message;
+        pipeline.appendChild(div);
+    }
+};
+
+
+/* ================= DECRYPTION ================= */
+document.getElementById('decryptBtn').onclick = async () => {
+
+    const pipeline = document.getElementById('decPipeline');
+    pipeline.innerHTML = "";
+
+    function step(msg, type="done") {
+        const div = document.createElement("div");
+        div.className = "pipeline-step " + type;
+        div.innerText = msg;
+        pipeline.appendChild(div);
+    }
+
+    const file = document.getElementById('stego_input').files[0];
+
+    if (!file) {
+        step("❌ Please upload stego image", "error");
+        return;
+    }
+
+    const form = new FormData();
+    form.append('stego_image', file);
+    form.append('metadata', document.getElementById('dec_metadata').value);
+
+    try {
+        step("📥 Sending request...");
+
+        const res = await fetch('/decryption/', {
+            method: 'POST',
+            body: form
+        });
+
+        const data = await res.json();
+
+        // 🔥 PIPELINE FROM BACKEND
+        if (data.updates) {
+            data.updates.forEach(u => step(u));
+        }
+
+        if (data.status === 'success') {
+            document.getElementById('recoveredImg').src =
+                "data:image/png;base64," + data.recovered_image;
+        } else {
+            step("❌ Decryption failed", "error");
+        }
+
+    } catch (err) {
+        step("❌ " + err.message, "error");
+    }
+};
+/* ================= AUTO DECRYPT ================= */
+document.getElementById('autoDecryptBtn').onclick = async () => {
+
+    const pipeline = document.getElementById('decPipeline');
+    pipeline.innerHTML = "";
+
+    function step(msg, type="done") {
+        const div = document.createElement("div");
+        div.className = "pipeline-step " + type;
+        div.innerText = msg;
+        pipeline.appendChild(div);
+    }
+
+    try {
+        step("🤖 Auto decrypt started");
+
+        // ✅ encrypted image from encryption output
+        const stegoImg = document.getElementById('stegoImg').src;
+
+        if (!stegoImg || !stegoImg.startsWith("data:image")) {
+            step("❌ No encrypted image found", "error");
+            return;
+        }
+
+        // ✅ AUTO FETCH METADATA FROM ENCRYPTION SECTION
+        let metadata = document.getElementById('metadata').value;
+
+        if (!metadata) {
+            step("❌ Metadata not available from encryption step", "error");
+            return;
+        }
+
+        step("📦 Preparing stego image");
+
+        const response = await fetch(stegoImg);
+        const blob = await response.blob();
+        const file = new File([blob], "stego.png", { type: "image/png" });
+
+        const form = new FormData();
+        form.append("stego_image", file);
+        form.append("metadata", metadata);
+
+        step("📡 Sending auto decrypt request");
+
+        const res = await fetch('/decryption/', {
+            method: 'POST',
+            body: form
+        });
+
+        const data = await res.json();
+
+        if (data.updates) {
+            data.updates.forEach(u => step(u));
+        }
+
+        if (data.status === "success") {
+            document.getElementById('recoveredImg').src =
+                "data:image/png;base64," + data.recovered_image;
+
+            step("✅ Auto Decryption Completed");
+        } else {
+            step("❌ Auto Decrypt Failed", "error");
+        }
+
+    } catch (err) {
+        step("❌ " + err.message, "error");
+    }
+};
+
+</script>
+
+</body>
+</html>

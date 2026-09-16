@@ -1,0 +1,62 @@
+Test cases for service principal
+
+
+Valid request with all fields and perform_dm_callback=true → expect 200, SP created, role assigned, AAD group add attempted, callback success/fail reflected.
+Valid request with perform_dm_callback=false → expect 200, callback skipped.
+Valid request with perform_dm_callback missing → expect callback default false (skipped).
+Valid request with perform_dm_callback="true" / "1" / "yes" → callback enabled.
+Valid request with perform_dm_callback="false" / "0" / "no" → callback disabled.
+Invalid JSON body → expect 400 with invalid JSON message.
+Empty body → expect 400.
+Missing sp_parameters → expect 400.
+Missing request_parameters → expect 400.
+sp_parameters present but empty object → creation likely fails, expect 500 with error details.
+application_id with special characters → verify sanitization in generated SP display name.
+application_id empty → verify behavior (name format and downstream Graph response).
+environment missing → verify name format and downstream handling.
+subscription_id missing → role assignment step should be skipped.
+subscription_role missing → role assignment step should be skipped.
+Both subscription_id and subscription_role missing → role assignment step skipped.
+sp_owners empty list → no owner adds; flow still succeeds.
+sp_owners contains empty string entries → ignored safely.
+sp_owners has invalid email(s) → unresolved owners ignored; flow continues.
+sp_owners has duplicate emails → no crash; owner behavior remains stable.
+Correlation ID in header x-correlation-id → returned correlation should match.
+Correlation ID in header x-ms-client-request-id → returned correlation should match.
+Correlation ID in body root → returned correlation should match.
+Correlation ID in request_parameters → returned correlation should match.
+No correlation ID provided anywhere → auto-generated correlation ID returned.
+Graph token acquisition failure (MI misconfigured) → expect 500.
+App registration creation Graph failure → expect 500.
+SP creation eventual consistency retry path succeeds before max attempts → expect 200.
+SP creation fails after retry limit → expect 500.
+Owner add to app fails but SP add succeeds → flow should continue, not crash.
+Owner add to SP fails but app add succeeds → flow should continue, not crash.
+Cosmos client creation failure → expect 500.
+Input container upsert failure (request doc) → warning path, flow should continue.
+Output container query failure → expect 500.
+Existing SP found in output container → replace path exercised.
+No existing SP in output container → upsert path exercised.
+Role definition not found for given role name → role step failed, overall may still be 200.
+Role assignment API returns error (403/409/etc.) → role step failed, overall may still be 200.
+Role assignment exception thrown → role step failed.
+AAD group add success (200/201/204) → group step success.
+AAD group already-member response (400/409 + “already exist”) → treated as success.
+AAD group object ID missing in config → group step skipped.
+AAD group add hard failure → group step failed, overall may still be 200.
+Callback enabled + all callback fields present + endpoint success → DM_callback_sent=true, callback step success.
+Callback enabled + endpoint timeout/failure → DM_callback_sent=false, callback step failed.
+Callback enabled + missing ritm_number → callback not sent, callback step failed.
+Callback enabled + missing catalog_task_sysid → callback not sent, callback step failed.
+Callback enabled + both missing (ritm_number, catalog_task_sysid) → callback step failed.
+Failure path (500) still attempts failure callback (when enabled and required fields present).
+Success response contract validation: contains status, message, details, and step_status keys.
+Error response contract validation: contains status=error, details.error_details, DM_callback_sent, step_status.
+Verify step_status transitions: success/failed/skipped are correct per scenario.
+Load/concurrency test with multiple simultaneous requests → no cross-request correlation leakage.
+Permission test: MI lacks Graph permissions → clear failure response.
+Permission test: MI lacks RBAC assignment permission on subscription → role step failed.
+Network/transient failure test on Graph/ARM/Cosmos/Logic App endpoints → proper error handling and response shape.
+Data persistence test: created SP record fields (appreg_object_id, service_principal_id, display_name, owners, etc.) saved correctly.
+Idempotency observation test: repeated same logical request creates new random-name SP (confirm expected behavior).
+Logging observability test: correlation ID appears in logs across major steps.

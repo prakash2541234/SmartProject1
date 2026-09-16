@@ -1,0 +1,38 @@
+:root {
+  font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+  color: #041b3f;
+}
+
+/* Full screen layout */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f4f7fb;
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;   /* top align (important) */
+
+  padding: 40px 60px;
+  box-sizing: border-box;
+}
+
+/* Main wrapper */
+.container {
+  width: 100%;
+  max-width: 1400px;
+}
+
+/* Main content */
+.content {
+  width: 100%;
+  padding: 40px;
+  background: #ffffff;
+  border-radius: 16px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
